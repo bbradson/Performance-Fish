@@ -1,0 +1,72 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net48</TargetFramework>
+		<LangVersion>preview</LangVersion>
+		<EnableNETAnalyzers>True</EnableNETAnalyzers>
+		<AnalysisLevel>preview-all</AnalysisLevel>
+		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+		<Configurations>v1.3;v1.4</Configurations>
+	</PropertyGroup>
+	<Choose>
+		<When Condition="'$(Configuration)' == 'v1.3'">
+			<ItemGroup>
+				<!--PackageReference Include="Krafs.Rimworld.Ref" Version="1.3.*" /-->
+				<Reference Include="Assembly-CSharp">
+					<HintPath>E:\RimWorld\1.3\RimWorldWin64_Data\Managed\Assembly-CSharp.dll</HintPath>
+				</Reference>
+				<Reference Include="mscorlib">
+					<HintPath>E:\RimWorld\1.3\RimWorldWin64_Data\Managed\mscorlib.dll</HintPath>
+				</Reference>
+				<Reference Include="UnityEngine.CoreModule">
+					<HintPath>E:\RimWorld\1.3\RimWorldWin64_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+				</Reference>
+				<Reference Include="UnityEngine.IMGUIModule">
+					<HintPath>E:\RimWorld\1.3\RimWorldWin64_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+				</Reference>
+				<Reference Include="1Fishery">
+					<HintPath>..\..\..\Fishery\1.3\Assemblies\1Fishery.dll</HintPath>
+				</Reference>
+				<Reference Include="PerformanceFish">
+					<HintPath>..\..\1.3\Assemblies\PerformanceFish.dll</HintPath>
+				</Reference>
+			</ItemGroup>
+		</When>
+		<When Condition="'$(Configuration)' == 'v1.4'">
+			<ItemGroup>
+				<!--PackageReference Include="Krafs.Rimworld.Ref" Version="1.4.*-*" /-->
+				<Reference Include="Assembly-CSharp">
+					<HintPath>E:\RimWorld\1.4\RimWorldWin64_Data\Managed\Assembly-CSharp.dll</HintPath>
+				</Reference>
+				<Reference Include="mscorlib">
+					<HintPath>E:\RimWorld\1.4\RimWorldWin64_Data\Managed\mscorlib.dll</HintPath>
+				</Reference>
+				<Reference Include="UnityEngine.CoreModule">
+					<HintPath>E:\RimWorld\1.4\RimWorldWin64_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+				</Reference>
+				<Reference Include="UnityEngine.IMGUIModule">
+					<HintPath>E:\RimWorld\1.4\RimWorldWin64_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+				</Reference>
+				<Reference Include="1Fishery">
+					<HintPath>..\..\..\Fishery\1.4\Assemblies\1Fishery.dll</HintPath>
+				</Reference>
+				<Reference Include="PerformanceFish">
+					<HintPath>..\..\1.4\Assemblies\PerformanceFish.dll</HintPath>
+				</Reference>
+			</ItemGroup>
+		</When>
+	</Choose>
+	<ItemGroup>
+		<PackageReference Include="Lib.Harmony" Version="2.*" />
+		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.*" />
+		<PackageReference Include="xunit" Version="2.*" />
+		<PackageReference Include="xunit.runner.visualstudio" Version="2.*">
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+			<PrivateAssets>all</PrivateAssets>
+		</PackageReference>
+		<PackageReference Include="coverlet.collector" Version="3.*">
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+			<PrivateAssets>all</PrivateAssets>
+		</PackageReference>
+	</ItemGroup>
+</Project>
