@@ -436,6 +436,12 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 
 			ref var cacheItem = ref cache._items[cache.IndexOfKey(ingredientCount)];
 
+			if ((cache.Count == 1 && cacheItem.Value.Defs.Count == 1)
+				|| bill.recipe?.workerCounterClass != typeof(RecipeWorkerCounter))
+			{
+				return;
+			}
+
 			cacheItem = new(cacheItem.Key, new(cacheItem.Value.Defs, true));
 		}
 	}
