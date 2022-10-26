@@ -212,7 +212,7 @@ public class Haulables : ClassWithFishPatches
 				instance.haulables.Add(t);
 			cache.contains = true;
 			cache.ShouldRefreshNow = false;
-			//HaulablesCache.Get[new(t, instance)] = cache;
+			HaulablesCache.Get[new(t, instance)] = cache;
 		}
 	}
 
@@ -237,7 +237,7 @@ public class Haulables : ClassWithFishPatches
 			instance.haulables.Remove(t);
 			cache.contains = false;
 			cache.ShouldRefreshNow = false;
-			//HaulablesCache.Get[new(t, instance)] = cache;
+			HaulablesCache.Get[new(t, instance)] = cache;
 		}
 	}
 

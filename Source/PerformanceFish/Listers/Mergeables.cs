@@ -24,7 +24,7 @@ public class Mergeables : ClassWithFishPatches
 					instance.mergeables.Remove(t);
 					cache.contains = false;
 					cache.ShouldRefreshNow = false;
-					//MergeablesCache.Get[new(t, instance)] = cache;
+					MergeablesCache.Get[new(t, instance)] = cache;
 				}
 			}
 			else
@@ -35,7 +35,7 @@ public class Mergeables : ClassWithFishPatches
 						instance.mergeables.Add(t);
 					cache.contains = true;
 					cache.ShouldRefreshNow = false;
-					//MergeablesCache.Get[new(t, instance)] = cache;
+					MergeablesCache.Get[new(t, instance)] = cache;
 				}
 			}
 		}
@@ -59,7 +59,7 @@ public class Mergeables : ClassWithFishPatches
 			cache.contains = true;
 			cache.ShouldRefreshNow = false;
 
-			//MergeablesCache.Get[new(t, instance)] = cache;
+			MergeablesCache.Get[new(t, instance)] = cache;
 		}
 		public static CodeInstructions Transpiler(CodeInstructions CodeInstructions)
 			=> Reflection.MakeReplacementCall(CheckAdd);
@@ -82,7 +82,7 @@ public class Mergeables : ClassWithFishPatches
 				cache.contains = false;
 				cache.ShouldRefreshNow = false;
 
-				//MergeablesCache.Get[new(t, instance)] = cache;
+				MergeablesCache.Get[new(t, instance)] = cache;
 			}
 		}
 		public static CodeInstructions Transpiler(CodeInstructions CodeInstructions)
