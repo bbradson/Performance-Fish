@@ -51,6 +51,9 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 				var bill = thingValidator.Bill;
 
 				if (HasNoFilters(bill) // apparently applies to a rim reborn benches?
+#if V1_4
+					|| bill.billStack?.billGiver is Building_MechGestator
+#endif
 					|| (BlackListedModExtensions.Exists(b => b != null) && IsBlackListed(bill)))  // <-- Fuck these too
 				{
 					list = GetDefaultList(r);
@@ -401,11 +404,12 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 		public override Delegate TargetMethodGroup => WorkGiver_DoBill.TryFindBestIngredientsInSet_NoMixHelper;
 
 		public static void Prefix(ref bool alreadySorted, Bill? bill)
-			=> alreadySorted = bill?.billStack is { } stack
+			=> alreadySorted = alreadySorted
+			|| (bill?.billStack is { } stack
 #if V1_4
 			&& stack.billGiver is not Building_MechGestator
 #endif
-			;
+			);
 
 		public static CodeInstructions? Transpiler(CodeInstructions codes, MethodBase method)
 		{
