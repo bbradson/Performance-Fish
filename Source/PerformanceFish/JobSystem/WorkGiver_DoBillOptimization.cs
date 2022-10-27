@@ -400,7 +400,12 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 
 		public override Delegate TargetMethodGroup => WorkGiver_DoBill.TryFindBestIngredientsInSet_NoMixHelper;
 
-		public static void Prefix(ref bool alreadySorted) => alreadySorted = true;
+		public static void Prefix(ref bool alreadySorted, Bill? bill)
+			=> alreadySorted = bill?.billStack is { } stack
+#if V1_4
+			&& stack.billGiver is not Building_MechGestator
+#endif
+			;
 
 		public static CodeInstructions? Transpiler(CodeInstructions codes, MethodBase method)
 		{
@@ -427,8 +432,14 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 
 		public static void MarkIngredientCountAsFound(IngredientCount ingredientCount, Bill bill)
 		{
-			if (bill is null)
+			if (bill?.billStack is not { } billStack
+#if V1_4
+				|| billStack.billGiver is Building_MechGestator
+#endif
+				)
+			{
 				return;
+			}
 
 			var cache = RecipeIngredientCache.Get[bill].thingDefs;
 			if (cache is null)
