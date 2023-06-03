@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -8,7 +8,8 @@ public class GraphicPatches : ClassWithFishPatches
 {
 	public class DrawMeshInt_Patch : FishPatch
 	{
-		public override MethodBase TargetMethodInfo => AccessTools.DeclaredMethod(typeof(Graphic), nameof(Graphic.DrawMeshInt));
+		public override MethodBase TargetMethodInfo { get; }
+			= AccessTools.DeclaredMethod(typeof(Graphic), nameof(Graphic.DrawMeshInt));
 
 		public static void Replacement(Graphic __instance, Mesh mesh, Vector3 loc, Quaternion quat, Material mat)
 		{
@@ -18,9 +19,11 @@ public class GraphicPatches : ClassWithFishPatches
 
 	public class Shadow_DrawWorker_Patch : FishPatch
 	{
-		public override MethodBase TargetMethodInfo => AccessTools.DeclaredMethod(typeof(Graphic_Shadow), nameof(Graphic_Shadow.DrawWorker));
+		public override MethodBase TargetMethodInfo { get; }
+			= AccessTools.DeclaredMethod(typeof(Graphic_Shadow), nameof(Graphic_Shadow.DrawWorker));
 
-		public static void Replacement(Graphic_Shadow __instance, Vector3 loc, Rot4 rot, ThingDef thingDef, Thing thing, float extraRotation)
+		public static void Replacement(Graphic_Shadow __instance, Vector3 loc, Rot4 rot, ThingDef? thingDef, Thing thing,
+			float extraRotation)
 		{
 			if (__instance.shadowMesh is null
 				|| thingDef is null

@@ -1,13 +1,18 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-global using HaulablesCache = PerformanceFish.Cache.ByReferenceRefreshable<Verse.Thing, RimWorld.ListerHaulables, PerformanceFish.Listers.Haulables.FishHaulableInfo>;
+global using HaulablesCache
+	= PerformanceFish.Cache.ByReference<Verse.Thing, RimWorld.ListerHaulables,
+		PerformanceFish.Listers.Haulables.HaulablesCacheValue>;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection.Emit;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using PerformanceFish.Cache;
+using PerformanceFish.ModCompatibility;
 
 namespace PerformanceFish.Listers;
 
@@ -15,13 +20,18 @@ public class Haulables : ClassWithFishPatches
 {
 	public class MapPreTick_Patch : FishPatch
 	{
-		public override string Description => "Throttling of the ListerHaulablesTick. This marks whether items should be moved from one stockpile to another. " +
-			"When throttled these checks get spread out more evenly, helping against spikes that can happen with large deep storage containers.";
+		public override bool Enabled => base.Enabled && !ActiveMods.Multiplayer;
+		
+		public override string Description { get; }
+			= "Throttling of the ListerHaulablesTick. This marks whether items should be moved from one stockpile to "
+				+ "another. When throttled these checks get spread out more evenly, helping against spikes that can "
+				+ "happen with large deep storage containers.";
 
-		public override Expression<Action> TargetMethod => () => default(Map)!.MapPreTick();
+		public override Expression<Action> TargetMethod { get; } = static () => default(Map)!.MapPreTick();
 
 		public static CodeInstructions Transpiler(CodeInstructions codes)
-			=> codes.MethodReplacer(new ListerHaulables(null).ListerHaulablesTick, ThreadedOrThrottled_ListerHaulablesTick);
+			=> codes.MethodReplacer(new ListerHaulables(null).ListerHaulablesTick,
+				ThreadedOrThrottled_ListerHaulablesTick);
 
 		public static void ThreadedOrThrottled_ListerHaulablesTick(ListerHaulables instance)
 		{
@@ -42,7 +52,7 @@ public class Haulables : ClassWithFishPatches
 			if (currentCellCheckCount is null)
 				return;
 
-			if (_currentTask != null && !_currentTask.IsCompleted)
+			if (_currentTask is { IsCompleted: false })
 			{
 				if (currentCellCheckCount.value > 1)
 					currentCellCheckCount.value--;
@@ -51,8 +61,8 @@ public class Haulables : ClassWithFishPatches
 					Interlocked.Increment(ref _queue);
 					_currentTask = _currentTask.ContinueWith(t =>
 					{
-						if (t.Exception is { } exception)
-							Log.Error(exception.ToString());
+						if (t.Exception is { } taskException)
+							Log.Error(taskException.ToString());
 
 						lock (Lock)
 						{
@@ -67,7 +77,8 @@ public class Haulables : ClassWithFishPatches
 				{
 					if (_skippedTicks >= 9)
 					{
-						Log.Warning("Skipped 10 or more ListerHaulables ticks. This often means there's some kind of hauling error happening");
+						Log.Warning("Skipped 10 or more ListerHaulables ticks. This often means there's some "
+							+ "kind of hauling error happening");
 						_skippedTicks = 0;
 					}
 					else
@@ -75,6 +86,7 @@ public class Haulables : ClassWithFishPatches
 						_skippedTicks++;
 					}
 				}
+
 				return;
 			}
 			else
@@ -122,6 +134,7 @@ public class Haulables : ClassWithFishPatches
 			{
 				Log.Error(ex.ToString());
 			}
+
 			Stopwatch.Stop();
 			if (Stopwatch.ElapsedTicks > 4000L)
 			{
@@ -133,6 +146,7 @@ public class Haulables : ClassWithFishPatches
 				if (cellCheckCount.value < 4)
 					cellCheckCount.value++;
 			}
+
 			Stopwatch.Reset();
 		}
 
@@ -147,6 +161,7 @@ public class Haulables : ClassWithFishPatches
 				if (groupCycleIndex >= int.MaxValue)
 					groupCycleIndex = 0;
 			}
+
 			_lastGroupCycleIndex = groupCycleIndex;
 
 			var allGroupsListForReading = instance.map.haulDestinationManager.AllGroupsListForReading;
@@ -155,9 +170,11 @@ public class Haulables : ClassWithFishPatches
 
 			var num = groupCycleIndex % allGroupsListForReading.Count;
 			var slotGroup = allGroupsListForReading[num];
-			return slotGroup.CellsList.Count == 0 ? null
+			return slotGroup.CellsList.Count == 0
+				? null
 				: ListerHaulablesTick_Patch.CellCheckCountsBySlotGroup.GetOrCreateValue(slotGroup);
 		}
+
 		public static int MainThread { get; private set; }
 		public static ConcurrentQueue<Thing> ThingsToRemove { get; } = new();
 		public static ConcurrentQueue<Thing> ThingsToAdd { get; } = new();
@@ -173,15 +190,21 @@ public class Haulables : ClassWithFishPatches
 
 	public class ListerHaulablesTick_Patch : FishPatch
 	{
-		public override string Description => "Part of the ListerHaulables throttling optimization";
-		public override Expression<Action> TargetMethod => () => default(ListerHaulables)!.ListerHaulablesTick();
+		public override bool Enabled => base.Enabled && !ActiveMods.Multiplayer;
+		
+		public override string Description { get; } = "Part of the ListerHaulables throttling optimization";
+
+		public override Expression<Action> TargetMethod { get; }
+			= static () => default(ListerHaulables)!.ListerHaulablesTick();
+
 		public static CodeInstructions Transpiler(CodeInstructions codes)
 			=> codes //.MethodReplacer(GridsUtility.GetThingList, GetCopyOfThingList)
-			.Manipulator(c => c.LoadsConstant(4), c =>
-				  {
-					  c.opcode = OpCodes.Call;
-					  c.operand = typeof(ListerHaulablesTick_Patch).GetProperty(nameof(CurrentCellCheckCount)).GetMethod;
-				  });
+				.Manipulator(static c => c.LoadsConstant(4), static c =>
+				{
+					c.opcode = OpCodes.Call;
+					c.operand = typeof(ListerHaulablesTick_Patch).GetProperty(nameof(CurrentCellCheckCount))!.GetMethod;
+				});
+
 		/*public static List<Thing> GetCopyOfThingList(IntVec3 c, Map map)
 		{
 			if (FishSettings.ThreadingEnabled)
@@ -196,6 +219,7 @@ public class Haulables : ClassWithFishPatches
 		}*/
 		public static int CurrentCellCheckCount { get; set; } = ListerHaulables.CellsPerTick;
 		public static ConditionalWeakTable<SlotGroup, CellCheckCount> CellCheckCountsBySlotGroup { get; } = new();
+
 		public class CellCheckCount
 		{
 			public int value = ListerHaulables.CellsPerTick;
@@ -205,15 +229,14 @@ public class Haulables : ClassWithFishPatches
 
 	public static void TryAdd(ListerHaulables instance, Thing t)
 	{
-		var cache = GetAndCheckHaulablesCache(instance, t);
-		if (!cache.contains)
-		{
-			if (!instance.haulables.Contains(t))
-				instance.haulables.Add(t);
-			cache.contains = true;
-			cache.ShouldRefreshNow = false;
-			HaulablesCache.Get[new(t, instance)] = cache;
-		}
+		ref var cache = ref HaulablesCache.GetAndCheck<HaulablesCacheValue>(t, instance);
+		if (cache.Contains)
+			return;
+
+		if (!instance.haulables.Contains(t))
+			instance.haulables.Add(t);
+		
+		cache.SetValue(true, t);
 	}
 
 	public static void ThreadSafeTryAdd(ListerHaulables instance, Thing t)
@@ -224,21 +247,19 @@ public class Haulables : ClassWithFishPatches
 		}
 		else
 		{
-			if (!GetAndCheckHaulablesCache(instance, t).contains)
+			if (!HaulablesCache.GetAndCheck<HaulablesCacheValue>(t, instance).Contains)
 				MapPreTick_Patch.ThingsToAdd.Enqueue(t);
 		}
 	}
 
 	public static void TryRemove(ListerHaulables instance, Thing t)
 	{
-		var cache = GetAndCheckHaulablesCache(instance, t);
-		if (cache.contains)
-		{
-			instance.haulables.Remove(t);
-			cache.contains = false;
-			cache.ShouldRefreshNow = false;
-			HaulablesCache.Get[new(t, instance)] = cache;
-		}
+		ref var cache = ref HaulablesCache.GetAndCheck<HaulablesCacheValue>(t, instance);
+		if (!cache.Contains)
+			return;
+
+		instance.haulables.Remove(t);
+		cache.SetValue(false, t);
 	}
 
 	public static void ThreadSafeTryRemove(ListerHaulables instance, Thing t)
@@ -249,37 +270,45 @@ public class Haulables : ClassWithFishPatches
 		}
 		else
 		{
-			if (GetAndCheckHaulablesCache(instance, t).contains)
+			if (HaulablesCache.GetAndCheck<HaulablesCacheValue>(t, instance).Contains)
 				MapPreTick_Patch.ThingsToRemove.Enqueue(t);
 		}
 	}
 
 	public class Check_Patch : FishPatch
 	{
-		public override string Description => "Optimization for haulables checking";
-		public override Expression<Action> TargetMethod => () => default(ListerHaulables)!.Check(null);
+		public override string Description { get; } = "Optimization for haulables checking";
+		public override Expression<Action> TargetMethod { get; } = static () => default(ListerHaulables)!.Check(null);
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static void Check(ListerHaulables instance, Thing t)
 		{
-			//So the situation here is this: Vanilla RimWorld normally checks 4 storage cells per tick for valid haul destinations, usually with the intent of reaching higher priority storage.
-			//This check itself can get quite expensive, but 4 of them aren't at all enough to be worth bothering with.
-			//Now problems arise when LWM's deep storage comes into play: You put 5 stacks of items in one cell and suddenly 4 checks turn into 20.
-			//20 hauling checks in turn is a number large enough to cause performance issues in colonies with high wealth.
+			// So the situation here is this: Vanilla RimWorld normally checks 4 storage cells per tick for valid haul
+			// destinations, usually with the intent of reaching higher priority storage. This check itself can get
+			// quite expensive, but 4 of them aren't at all enough to be worth bothering with. Now problems arise when
+			// LWM's deep storage comes into play: You put 5 stacks of items in one cell and suddenly 4 checks turn
+			// into 20. 20 hauling checks in turn is a number large enough to cause performance issues in colonies with
+			// high wealth.
+			
+			if (!t.def.alwaysHaulable && !t.def.designateHaulable)
+				return;
 
 			if (instance.ShouldBeHaulable(t))
 				ThreadSafeTryAdd(instance, t);
 			else
 				ThreadSafeTryRemove(instance, t);
 		}
-		public static CodeInstructions Transpiler(CodeInstructions CodeInstructions)
-			=> Reflection.MakeReplacementCall(Check);
+
+		public static CodeInstructions Transpiler(CodeInstructions codeInstructions, ILGenerator generator)
+			=> Reflection.GetCodeInstructions(Check, generator);
 	}
 
 	public class TryRemove_Patch : FishPatch
 	{
-		public override string Description => "Part of the ListerHaulables optimization";
-		public override Expression<Action> TargetMethod => () => default(ListerHaulables)!.TryRemove(null);
+		public override string Description { get; } = "Part of the ListerHaulables optimization";
+
+		public override Expression<Action> TargetMethod { get; }
+			= static () => default(ListerHaulables)!.TryRemove(null);
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static void TryRemove(ListerHaulables instance, Thing t)
@@ -287,52 +316,62 @@ public class Haulables : ClassWithFishPatches
 			if (t.def.category == ThingCategory.Item)
 				ThreadSafeTryRemove(instance, t);
 		}
-		public static CodeInstructions Transpiler(CodeInstructions CodeInstructions)
-			=> Reflection.MakeReplacementCall(TryRemove);
+
+		public static CodeInstructions Transpiler(CodeInstructions codeInstructions, ILGenerator generator)
+			=> Reflection.GetCodeInstructions(TryRemove, generator);
 	}
 
 	public class CheckAdd_Patch : FishPatch
 	{
-		public override string Description => "Part of the ListerHaulables optimization";
-		public override Expression<Action> TargetMethod => () => default(ListerHaulables)!.CheckAdd(null);
+		public override string Description { get; } = "Part of the ListerHaulables optimization";
+
+		public override Expression<Action> TargetMethod { get; }
+			= static () => default(ListerHaulables)!.CheckAdd(null);
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static void CheckAdd(ListerHaulables instance, Thing t)
 		{
-			var cache = GetAndCheckHaulablesCache(instance, t);
-
-			if (cache.contains || !instance.ShouldBeHaulable(t))
+			if (!t.def.alwaysHaulable && !t.def.designateHaulable)
 				return;
+			
+			if (HaulablesCache.GetAndCheck<HaulablesCacheValue>(t, instance).Contains
+				|| !instance.ShouldBeHaulable(t))
+			{
+				return;
+			}
 
 			ThreadSafeTryAdd(instance, t);
 		}
-		public static CodeInstructions Transpiler(CodeInstructions CodeInstructions)
-			=> Reflection.MakeReplacementCall(CheckAdd);
+
+		public static CodeInstructions Transpiler(CodeInstructions codeInstructions, ILGenerator generator)
+			=> Reflection.GetCodeInstructions(CheckAdd, generator);
 	}
 
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static FishHaulableInfo GetAndCheckHaulablesCache(ListerHaulables lister, Thing thing)
+	[StructLayout(LayoutKind.Sequential, Pack = 1)]
+	public record struct HaulablesCacheValue : ICacheable<HaulablesCache>
 	{
-		var key = new HaulablesCache(thing, lister);
-		return HaulablesCache.GetValue(ref key);
-	}
+		private int _nextRefreshTick;
+		public bool Contains;
 
-	public struct FishHaulableInfo : Cache.IIsRefreshable<HaulablesCache, FishHaulableInfo>
-	{
-		public int nextRefreshTick;
-		public bool contains;
+		public void Update(ref HaulablesCache key)
+		{
+			Contains = key.Second.haulables.Contains(key.First);
+			SetDirty(false, key.First.thingIDNumber);
+		}
 
-		public bool ShouldRefreshNow
+		public void SetValue(bool contains, Thing thing)
+		{
+			Contains = contains;
+			SetDirty(false, thing.thingIDNumber);
+		}
+		
+		public void SetDirty(bool value, int offset)
+			=> _nextRefreshTick = value ? 0 : TickHelper.Add(3072, offset, 2048);
+
+		public bool Dirty
 		{
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			get => nextRefreshTick < Current.Game.tickManager.TicksGame;
-			set => nextRefreshTick = value ? 0 : Current.Game.tickManager.TicksGame + 3072 + Math.Abs(Rand.Int % 2048);
-		}
-		public FishHaulableInfo SetNewValue(HaulablesCache key)
-		{
-			contains = key.Second.haulables.Contains(key.First);
-			ShouldRefreshNow = false;
-			return this;
+			get => TickHelper.Past(_nextRefreshTick);
 		}
 	}
 }

@@ -1,291 +1,268 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-using System.Diagnostics.CodeAnalysis;
+using JetBrains.Annotations;
+// ReSharper disable ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
 
 namespace PerformanceFish.Cache;
-public struct ByInt<T_in, T_result>
-	where T_in : notnull
-	where T_result : IIsRefreshable<T_in, T_result>
+
+#pragma warning disable CS9091
+[PublicAPI]
+public record struct ByInt<T, TResult> where T : notnull where TResult : new()
 {
-	private static Dictionary<ByInt<T_in, T_result>, T_result> _get = new();
+	private static FishTable<ByInt<T, TResult>, TResult> _get
+		= Utility.AddNew<ByInt<T, TResult>, TResult>();
+
 	[ThreadStatic]
-	private static Dictionary<ByInt<T_in, T_result>, T_result>? _getThreadStatic;
+	private static FishTable<ByInt<T, TResult>, TResult>? _getThreadStatic;
 
-	public static Dictionary<ByInt<T_in, T_result>, T_result> Get
-		=> /*UnityData.IsInMainThread ? _get
-		:*/ _getThreadStatic ??= Utility.AddNew<Dictionary<ByInt<T_in, T_result>, T_result>>();
+	public static FishTable<ByInt<T, TResult>, TResult> Get
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _getThreadStatic ??= Utility.AddNew<ByInt<T, TResult>, TResult>();
+	}
 
-	public static Dictionary<ByInt<T_in, T_result>, T_result> GetDirectly => _get;
+	public static FishTable<ByInt<T, TResult>, TResult> GetDirectly
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _get;
+	}
 
-	static ByInt() => Utility.All.Add(_get);
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static ref TResult GetOrAddReference(int key)
+		=> ref Get.GetOrAddReference(Unsafe.As<int, ByInt<T, TResult>>(ref key));
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static ref TResult GetOrAddReference(ByInt<T, TResult> key) => ref Get.GetOrAddReference(key);
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static ref TResult GetOrAddReference(ref ByInt<T, TResult> key) => ref Get.GetOrAddReference(ref key);
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static ref TResult GetExistingReference(int key)
+		=> ref Get.GetReference(Unsafe.As<int, ByInt<T, TResult>>(ref key));
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static ref TResult GetExistingReference(T key) => ref Get.GetReference(new(key));
 
 	public int Key;
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public unsafe ByInt(T_in key) => Key = FunctionPointers.IndexGetter<T_in>.Default(key);
+	public unsafe ByInt(T key) => Key = FunctionPointers.IndexGetter<T>.Default(key);
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static ref T_result GetValue(T_in key)
-	{
-		ref var cache = ref Get.TryGetReferenceUnsafe(new(key));
-
-		if (Unsafe.IsNullRef(ref cache))
-		{
-			Get[new(key)] = Reflection.New<T_result>();
-			cache = ref Get.GetReference(new(key))!;
-			goto RefreshCache;
-		}
-
-		if (!cache.ShouldRefreshNow)
-			return ref cache!;
-
-	RefreshCache:
-		cache.ShouldRefreshNow = false;
-		Get[new(key)] = cache.SetNewValue(key);
-
-		return ref cache!;
-	}
-
-	[MethodImpl(MethodImplOptions.NoInlining)]
-	public static unsafe ref T_result TryGetReferenceUnsafe(int key)
-		=> ref Unsafe.AsRef<T_result>(Unsafe.AsPointer(ref Get.TryGetReferenceUnsafe(ref Unsafe.As<int, ByInt<T_in, T_result>>(ref key))));
-
-	[MethodImpl(MethodImplOptions.NoInlining)]
-	public static unsafe ref T_result TryGetReferenceChecked(int key, out bool result)
-	{
-		ref var value = ref Unsafe.AsRef<T_result>(Unsafe.AsPointer(ref Get.TryGetReferenceUnsafe(ref Unsafe.As<int, ByInt<T_in, T_result>>(ref key))));
-		result = !Unsafe.IsNullRef(ref value) && !value.ShouldRefreshNow;
-		return ref value!;
-	}
+	public ByInt(int key) => Key = key;
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static bool TryGetValue(T_in key, [MaybeNullWhen(false)] out T_result value)
-		=> Get.TryGetValue(new(key), out value)
-		&& !value.ShouldRefreshNow;
+	public bool Equals(ByInt<T, TResult> other) => Key == other.Key;
 
-	public static T_result GetValueAndRefreshNow(T_in key)
-	{
-		var cache = Get.TryGetValue(new(key));
-		cache ??= Reflection.New<T_result>();
-		cache.ShouldRefreshNow = false;
-		Get[new(key)] = cache.SetNewValue(key);
-		return cache;
-	}
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public override int GetHashCode() => Key;
 }
 
-public struct ByIntRefreshable<T_first, T_second, T_result> : IEquatable<ByIntRefreshable<T_first, T_second, T_result>>
-	where T_first : notnull where T_second : notnull
-	where T_result : IIsRefreshable<ByIntRefreshable<T_first, T_second, T_result>, T_result>
+[PublicAPI]
+public record struct ByInt<T1, T2, TResult>
+	where T1 : notnull where T2 : notnull where TResult : new()
 {
-	private static EqualityComparer<ByIntRefreshable<T_first, T_second, T_result>> _comparer = new Comparer();
-	private class Comparer : EqualityComparer<ByIntRefreshable<T_first, T_second, T_result>>
-	{
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public override bool Equals(ByIntRefreshable<T_first, T_second, T_result> x, ByIntRefreshable<T_first, T_second, T_result> y)
-			=> x.First == y.First
-			&& x.Second == y.Second;
+	private static FishTable<ByInt<T1, T2, TResult>, TResult> _get
+		= Utility.AddNew<ByInt<T1, T2, TResult>, TResult>();
 
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public override int GetHashCode(ByIntRefreshable<T_first, T_second, T_result> obj)
-			=> HashCode.Combine(obj.First, obj.Second);
-	}
-
-	private static Dictionary<ByIntRefreshable<T_first, T_second, T_result>, T_result> _get = new(_comparer);
 	[ThreadStatic]
-	private static Dictionary<ByIntRefreshable<T_first, T_second, T_result>, T_result>? _getThreadStatic;
+	private static FishTable<ByInt<T1, T2, TResult>, TResult>? _getThreadStatic;
 
-	public static Dictionary<ByIntRefreshable<T_first, T_second, T_result>, T_result> Get
-		=> /*UnityData.IsInMainThread ? _get
-		:*/ _getThreadStatic ??= Utility.AddNew<Dictionary<ByIntRefreshable<T_first, T_second, T_result>, T_result>>(_comparer);
-
-	public static Dictionary<ByIntRefreshable<T_first, T_second, T_result>, T_result> GetDirectly => _get;
-
-	static ByIntRefreshable() => Utility.All.Add(_get);
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static unsafe ref T_result GetValue(ref ByIntRefreshable<T_first, T_second, T_result> key)
+	public static FishTable<ByInt<T1, T2, TResult>, TResult> Get
 	{
-		// CS8347 without this crap
-		ref var cache = ref Unsafe.AsRef<T_result>(Unsafe.AsPointer(ref Get.TryGetReferenceUnsafe(ref key)));
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _getThreadStatic ??= Utility.AddNew<ByInt<T1, T2, TResult>, TResult>();
+	}
 
-		if (Unsafe.IsNullRef(ref cache))
+	private static ref FishTable<ByInt<T1, T2, TResult>, TResult> GetCacheRef
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get
 		{
-			Get[key] = Reflection.New<T_result>();
-			cache = ref Unsafe.AsRef<T_result>(Unsafe.AsPointer(ref Get.TryGetReferenceUnsafe(ref key)))!;
-			goto RefreshCache;
+			_getThreadStatic ??= Utility.AddNew<ByInt<T1, T2, TResult>, TResult>();
+			return ref _getThreadStatic!;
 		}
-
-		if (!cache.ShouldRefreshNow)
-			return ref cache!;
-
-	RefreshCache:
-		cache.ShouldRefreshNow = false;
-		Get[key] = cache.SetNewValue(key);
-
-		return ref cache!;
 	}
+
+	public static FishTable<ByInt<T1, T2, TResult>, TResult> GetDirectly
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _get;
+	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static ref TResult GetOrAddReference(int first, int second)
+		=> ref Get.GetOrAddReference(new() { First = first, Second = second });
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static ref TResult GetOrAddReference(in ByInt<T1, T2, TResult> key)
+		=> ref Get.GetOrAddReference(ref Unsafe.AsRef(in key));
+
+	// [MethodImpl(MethodImplOptions.AggressiveInlining)]
+	// public static ref TResult GetOrAddReference(long key) // different, worse, GetHashCode method
+	// 	=> ref Unsafe.As<FishTable<ByInt<T1, T2, TResult>, TResult>, FishTable<long, TResult>>(ref GetCacheRef)
+	// 		.GetOrAddReference(key);
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
-	public static unsafe ref T_result TryGetReferenceUnsafe(int second, int first)
-		=> ref Unsafe.AsRef<T_result>(Unsafe.AsPointer(ref Get.TryGetReferenceUnsafe(ref Unsafe.As<int, ByIntRefreshable<T_first, T_second, T_result>>(ref first))));
+	public static ref TResult GetExistingReference(int first, int second)
+		=> ref Get.GetReference(new() { First = first, Second = second });
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
-	public static unsafe ref T_result TryGetReferenceChecked(int second, int first, out bool result)
+	public static ref TResult GetExistingReference(T1 first, T2 second)
+		=> ref Get.GetReference(new(first, second));
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public unsafe ByInt(T1 first, T2 second)
 	{
-		ref var value = ref Unsafe.AsRef<T_result>(Unsafe.AsPointer(ref Get.TryGetReferenceUnsafe(ref Unsafe.As<int, ByIntRefreshable<T_first, T_second, T_result>>(ref first))));
-		result = !Unsafe.IsNullRef(ref value) && !value.ShouldRefreshNow;
-		return ref value!;
+		First = FunctionPointers.IndexGetter<T1>.Default(first);
+		Second = FunctionPointers.IndexGetter<T2>.Default(second);
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static bool TryGetValue(ByIntRefreshable<T_first, T_second, T_result> key, [MaybeNullWhen(false)] out T_result value)
-		=> Get.TryGetValue(key, out value)
-		&& !value.ShouldRefreshNow;
-
-	public static T_result GetValueAndRefreshNow(ByIntRefreshable<T_first, T_second, T_result> key)
-	{
-		var cache = Get.TryGetValue(ref key);
-		cache ??= Reflection.New<T_result>();
-		cache.ShouldRefreshNow = false;
-		Get[key] = cache.SetNewValue(key);
-		return cache;
-	}
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public unsafe ByIntRefreshable(T_first first, T_second second)
-	{
-		First = FunctionPointers.IndexGetter<T_first>.Default(first);
-		Second = FunctionPointers.IndexGetter<T_second>.Default(second);
-	}
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public ByIntRefreshable(int first, int second)
+	public ByInt(int first, int second)
 	{
 		First = first;
 		Second = second;
 	}
-
-	public int First;
-	public int Second;
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public bool Equals(ByIntRefreshable<T_first, T_second, T_result> other)
-		=> First == other.First
-		&& Second == other.Second;
+	
+	public int First, Second;
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode()
-		=> HashCode.Combine(First, Second);
+	public bool Equals(ByInt<T1, T2, TResult> other)
+		=> Unsafe.As<ByInt<T1, T2, TResult>, long>(ref this) == Unsafe.As<ByInt<T1, T2, TResult>, long>(ref other);
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override bool Equals(object obj)
-		=> obj is ByIntRefreshable<T_first, T_second, T_result> cache
-		&& Equals(cache);
-
-	public static bool operator ==(ByIntRefreshable<T_first, T_second, T_result> left, ByIntRefreshable<T_first, T_second, T_result> right)
-		=> left.Equals(right);
-
-	public static bool operator !=(ByIntRefreshable<T_first, T_second, T_result> left, ByIntRefreshable<T_first, T_second, T_result> right)
-		=> !(left == right);
+	public override int GetHashCode() => HashCode.Combine(First, Second);
 }
 
-public struct ByInt<T_first, T_second, T_third, T_result> : IEquatable<ByInt<T_first, T_second, T_third, T_result>>
-	where T_first : notnull where T_second : notnull where T_third : notnull
-	where T_result : IIsRefreshable<ByInt<T_first, T_second, T_third, T_result>, T_result>
+[PublicAPI]
+public record struct ByInt<T1, T2, T3, TResult>
+	where T1 : notnull where T2 : notnull where T3 : notnull where TResult : new()
 {
-	private static Dictionary<ByInt<T_first, T_second, T_third, T_result>, T_result> _get = new();
+	private static FishTable<ByInt<T1, T2, T3, TResult>, TResult> _get
+		= Utility.AddNew<ByInt<T1, T2, T3, TResult>, TResult>();
+
 	[ThreadStatic]
-	private static Dictionary<ByInt<T_first, T_second, T_third, T_result>, T_result>? _getThreadStatic;
+	private static FishTable<ByInt<T1, T2, T3, TResult>, TResult>? _getThreadStatic;
 
-	public static Dictionary<ByInt<T_first, T_second, T_third, T_result>, T_result> Get
-		=> /*UnityData.IsInMainThread ? _get
-		:*/ _getThreadStatic ??= Utility.AddNew<Dictionary<ByInt<T_first, T_second, T_third, T_result>, T_result>>();
+	public static FishTable<ByInt<T1, T2, T3, TResult>, TResult> Get
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _getThreadStatic ??= Utility.AddNew<ByInt<T1, T2, T3, TResult>, TResult>();
+	}
 
-	public static Dictionary<ByInt<T_first, T_second, T_third, T_result>, T_result> GetDirectly => _get;
-
-	static ByInt() => Utility.All.Add(_get);
+	public static FishTable<ByInt<T1, T2, T3, TResult>, TResult> GetDirectly
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _get;
+	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static unsafe ref T_result GetValue(ByInt<T_first, T_second, T_third, T_result> key)
+	public static unsafe ref TResult GetOrAddReference(int first, int second, int third)
 	{
-		ref var cache = ref Unsafe.AsRef<T_result>(Unsafe.AsPointer(ref Get.TryGetReferenceUnsafe(ref key)));
-
-		if (Unsafe.IsNullRef(ref cache))
-		{
-			Get[key] = Reflection.New<T_result>();
-			cache = ref Unsafe.AsRef<T_result>(Unsafe.AsPointer(ref Get.TryGetReferenceUnsafe(ref key)))!;
-			goto RefreshCache;
-		}
-
-		if (!cache.ShouldRefreshNow)
-			return ref cache!;
-
-	RefreshCache:
-		cache.ShouldRefreshNow = false;
-		Get[key] = cache.SetNewValue(key);
-
-		return ref cache!;
+		var key = new ByInt<T1, T2, T3, TResult> { First = first, Second = second, Third = third };
+		return ref Get.GetOrAddReference(ref key);
 	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static ref TResult GetOrAddReference(in ByInt<T1, T2, T3, TResult> key)
+		=> ref Get.GetOrAddReference(ref Unsafe.AsRef(in key));
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
-	public static unsafe ref T_result TryGetReferenceUnsafe(int second, int first, int third)
-		=> ref Unsafe.AsRef<T_result>(Unsafe.AsPointer(ref Get.TryGetReferenceUnsafe(ref Unsafe.As<int, ByInt<T_first, T_second, T_third, T_result>>(ref first))));
+	public static ref TResult GetExistingReference(int first, int second, int third)
+		=> ref Get.GetReference(new() { First = first, Second = second, Third = third });
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
-	public static unsafe ref T_result TryGetReferenceChecked(int second, int first, out bool result)
+	public static ref TResult GetExistingReference(T1 first, T2 second, T3 third)
+		=> ref Get.GetReference(new(first, second, third));
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public unsafe ByInt(T1 first, T2 second, T3 third)
 	{
-		ref var value = ref Unsafe.AsRef<T_result>(Unsafe.AsPointer(ref Get.TryGetReferenceUnsafe(ref Unsafe.As<int, ByInt<T_first, T_second, T_third, T_result>>(ref first))));
-		result = !Unsafe.IsNullRef(ref value) && !value.ShouldRefreshNow;
-		return ref value!;
+		First = FunctionPointers.IndexGetter<T1>.Default(first);
+		Second = FunctionPointers.IndexGetter<T2>.Default(second);
+		Third = FunctionPointers.IndexGetter<T3>.Default(third);
 	}
+	
+	public int First, Second, Third;
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static bool TryGetValue(ByInt<T_first, T_second, T_third, T_result> key, out T_result value)
-		=> Get.TryGetValue(key, out value)
-		&& !value.ShouldRefreshNow;
-
-	public static T_result GetValueAndRefreshNow(ByInt<T_first, T_second, T_third, T_result> key)
-	{
-		var cache = Get.TryGetValue(ref key);
-		cache ??= Reflection.New<T_result>();
-		cache.ShouldRefreshNow = false;
-		Get[key] = cache.SetNewValue(key);
-		return cache;
-	}
+	public bool Equals(ByInt<T1, T2, T3, TResult> other)
+		=> (Unsafe.As<ByInt<T1, T2, T3, TResult>, long>(ref this)
+			== Unsafe.As<ByInt<T1, T2, T3, TResult>, long>(ref other))
+		& (Third == other.Third);
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public unsafe ByInt(T_first first, T_second second, T_third third)
-	{
-		First = FunctionPointers.IndexGetter<T_first>.Default(first);
-		Second = FunctionPointers.IndexGetter<T_second>.Default(second);
-		Third = FunctionPointers.IndexGetter<T_third>.Default(third);
-	}
-
-	public int First;
-	public int Second;
-	public int Third;
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public bool Equals(ByInt<T_first, T_second, T_third, T_result> other)
-		=> First == other.First
-		&& Second == other.Second
-		&& Third == other.Third;
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode()
-		=> HashCode.Combine(First, Second, Third);
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override bool Equals(object obj)
-		=> obj is ByInt<T_first, T_second, T_third, T_result> cache
-		&& Equals(cache);
-
-	public static bool operator ==(ByInt<T_first, T_second, T_third, T_result> left, ByInt<T_first, T_second, T_third, T_result> right)
-		=> left.Equals(right);
-
-	public static bool operator !=(ByInt<T_first, T_second, T_third, T_result> left, ByInt<T_first, T_second, T_third, T_result> right)
-		=> !(left == right);
+	public override int GetHashCode() => HashCode.Combine(First, Second, Third);
 }
+
+[PublicAPI]
+public record struct ByInt<T1, T2, T3, T4, TResult>
+	where T1 : notnull where T2 : notnull where T3 : notnull where T4 : notnull
+	where TResult : new()
+{
+	private static FishTable<ByInt<T1, T2, T3, T4, TResult>, TResult> _get
+		= Utility.AddNew<ByInt<T1, T2, T3, T4, TResult>, TResult>();
+
+	[ThreadStatic]
+	private static FishTable<ByInt<T1, T2, T3, T4, TResult>, TResult>? _getThreadStatic;
+
+	public static FishTable<ByInt<T1, T2, T3, T4, TResult>, TResult> Get
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _getThreadStatic ??= Utility.AddNew<ByInt<T1, T2, T3, T4, TResult>, TResult>();
+	}
+
+	public static FishTable<ByInt<T1, T2, T3, T4, TResult>, TResult> GetDirectly
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _get;
+	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static unsafe ref TResult GetOrAddReference(int first, int second, int third, int fourth)
+	{
+		var key = new ByInt<T1, T2, T3, T4, TResult>
+		{
+			First = first, Second = second, Third = third, Fourth = fourth
+		};
+		return ref Get.GetOrAddReference(ref key);
+	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static ref TResult GetOrAddReference(in ByInt<T1, T2, T3, T4, TResult> key)
+		=> ref Get.GetOrAddReference(ref Unsafe.AsRef(in key));
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static ref TResult GetExistingReference(int first, int second, int third, int fourth)
+		=> ref Get.GetReference(new() { First = first, Second = second, Third = third, Fourth = fourth });
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static ref TResult GetExistingReference(T1 first, T2 second, T3 third, T4 fourth)
+		=> ref Get.GetReference(new(first, second, third, fourth));
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public unsafe ByInt(T1 first, T2 second, T3 third, T4 fourth)
+	{
+		First = FunctionPointers.IndexGetter<T1>.Default(first);
+		Second = FunctionPointers.IndexGetter<T2>.Default(second);
+		Third = FunctionPointers.IndexGetter<T3>.Default(third);
+		Fourth = FunctionPointers.IndexGetter<T4>.Default(fourth);
+	}
+
+	public int First, Second, Third, Fourth;
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public bool Equals(ByInt<T1, T2, T3, T4, TResult> other)
+		=> (Unsafe.As<ByInt<T1, T2, T3, T4, TResult>, long>(ref this)
+				== Unsafe.As<ByInt<T1, T2, T3, T4, TResult>, long>(ref other))
+			& (Unsafe.As<int, long>(ref Third) == Unsafe.As<int, long>(ref other.Third));
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public override int GetHashCode() => HashCode.Combine(First, Second, Third, Fourth);
+}
+#pragma warning restore CS9091

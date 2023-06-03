@@ -1,9 +1,13 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-using StorageSettingsCache = PerformanceFish.Cache.ByReferenceRefreshable<Verse.Thing, RimWorld.StorageSettings, PerformanceFish.Listers.StorageSettingsPatches.FishStorageSettingsInfo>;
+using System.Runtime.InteropServices;
+using PerformanceFish.Cache;
+using StorageSettingsCache
+	= PerformanceFish.Cache.ByReference<Verse.Thing, RimWorld.StorageSettings,
+		PerformanceFish.Listers.StorageSettingsPatches.StorageSettingsCacheValue>;
 
 namespace PerformanceFish.Listers;
 
@@ -11,19 +15,20 @@ public class StorageSettingsPatches : ClassWithFishPatches
 {
 	public class AllowedToAccept_Patch : FirstPriorityFishPatch
 	{
-		public override string Description => "StorageSettings caching";
-		public override Expression<Action> TargetMethod => () => default(StorageSettings)!.AllowedToAccept(default(Thing));
+		public override string Description { get; } = "StorageSettings caching";
+
+		public override Expression<Action> TargetMethod { get; }
+			= static () => default(StorageSettings)!.AllowedToAccept(default(Thing));
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static unsafe bool Prefix(StorageSettings __instance, Thing t, ref bool __result, out bool __state)
+		public static bool Prefix(StorageSettings __instance, Thing t, ref bool __result, out bool __state)
 		{
-			var key = new StorageSettingsCache(t, __instance);
-			ref var cache = ref StorageSettingsCache.Get.TryGetReferenceUnsafe(ref key);
+			ref var cache = ref StorageSettingsCache.GetOrAddReference(new(t, __instance));
 
-			if (Unsafe.IsNullRef(ref cache) || cache.ShouldRefreshNow)
+			if (cache.Dirty)
 				return __state = true;
 
-			__result = cache.allowedToAccept;
+			__result = cache.AllowedToAccept;
 			return __state = false;
 		}
 
@@ -33,14 +38,15 @@ public class StorageSettingsPatches : ClassWithFishPatches
 			if (!__state)
 				return;
 
-			StorageSettingsCache.Get[new(t, __instance)] = new() { ShouldRefreshNow = false, allowedToAccept = __result };
+			StorageSettingsCache.Update<StorageSettingsCacheValue, bool>(t, __instance, __result);
 		}
 	}
 
 	public class TryNotifyChanged_Patch : FishPatch
 	{
-		public override string Description => "StorageSettings cache resetting";
-		public override Expression<Action> TargetMethod => () => default(StorageSettings)!.TryNotifyChanged();
+		public override string Description { get; } = "StorageSettings cache resetting";
+		public override Expression<Action> TargetMethod { get; } = static () => default(StorageSettings)!.TryNotifyChanged();
+
 		public static void Postfix(StorageSettings __instance)
 		{
 			StorageSettingsCache.Get.Clear();
@@ -49,17 +55,22 @@ public class StorageSettingsPatches : ClassWithFishPatches
 		}
 	}
 
-	public struct FishStorageSettingsInfo : Cache.IIsRefreshable<StorageSettingsCache, FishStorageSettingsInfo>
+	[StructLayout(LayoutKind.Sequential, Pack = 1)]
+	public record struct StorageSettingsCacheValue : ICacheable<StorageSettingsCache, bool>
 	{
-		public int nextRefreshTick;
-		public bool allowedToAccept;
+		private int _nextRefreshTick;
+		public bool AllowedToAccept;
 
-		public bool ShouldRefreshNow
+		public bool Dirty
 		{
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			get => nextRefreshTick < Current.Game.tickManager.TicksGame;
-			set => nextRefreshTick = value ? 0 : Current.Game.tickManager.TicksGame + 3072 + Math.Abs(Rand.Int % 2048);
+			get => TickHelper.Past(_nextRefreshTick);
 		}
-		public FishStorageSettingsInfo SetNewValue(StorageSettingsCache key) => throw new NotImplementedException();
+
+		public void Update(ref StorageSettingsCache key, bool allowedToAccept)
+		{
+			AllowedToAccept = allowedToAccept;
+			_nextRefreshTick = TickHelper.Add(3072, key.First.thingIDNumber, 2048);
+		}
 	}
 }

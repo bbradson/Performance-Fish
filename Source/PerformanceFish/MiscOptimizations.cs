@@ -1,55 +1,79 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 using System.Linq;
 using System.Reflection.Emit;
-using System.Runtime.CompilerServices;
+using Mono.Cecil;
+using Mono.Cecil.Cil;
+using PerformanceFish.Prepatching;
 using static System.Reflection.Emit.OpCodes;
 
 namespace PerformanceFish;
-public class MiscOptimizations : ClassWithFishPatches
-{
-	public class GenList_ListFullCopy_Patch : FishPatch
-	{
-		public override void TryUnpatch() { } // prevent unpatching
 
-		public override string Description => "Minor optimization. Requires a full restart to toggle off due to a bug in harmony";
-		public override Delegate TargetMethodGroup => GenList.ListFullCopy<object>; // harmony patches for all T types
+public class MiscPrepatchedOptimizations : ClassWithFishPrepatches
+{
+	public class GenList_ListFullCopy : FishPrepatch
+	{
+		public override string Description { get; }
+			= "Optimization for a basic and frequently used list copying method. Replaces a for loop with an "
+			+ "optimized IL instruction.";/*{(ActiveMods.GradientHair
+					? " Disabled due to incompatibility with Gradient Hair" : "")}";*/
+
+		// public override bool Enabled => base.Enabled && !ActiveMods.GradientHair;
+
+		public override MethodBase TargetMethodBase { get; } = methodof(GenList.ListFullCopy<object>);
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ListFullCopy<object>/*Utility.CollectionExtensions.Copy<object>*/);
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static bool Prefix(IList source, ref IList __result)
-			=> source is null || source.Count == 0
-			|| (__result = FisheryLib.CollectionExtensions.TryNew(source, source.GetType().GetGenericArguments()[0])) is null;
+		public static List<T> ListFullCopy<T>(List<T> source) => source.Copy();
 	}
 
-	public class WindManager_WindManagerTick_Patch : FishPatch
+	public class GenCollection_FirstOrDefault : FishPrepatch
 	{
-		public override string Description => "Throttles plant sway to update at most once per frame instead of every tick. Also fixes the plant sway setting to actually disable plant sway calculations when it should. " +
-			"By default it simply sets values to 0 but then still goes through everything, sacrificing tps for no reason";
-		public override Expression<Action> TargetMethod => () => default(WindManager)!.WindManagerTick();
+		public override string? Description { get; }
+			= "Minor optimization for a RimWorld method used for list lookups, by looping in a more efficient manner "
+			+ "with fewer bounds checks";
 
-		public static CodeInstructions? Transpiler(CodeInstructions codes)
+		public override MethodBase TargetMethodBase { get; } = methodof(GenCollection.FirstOrDefault<object>);
+	
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(FirstOrDefault<object>);
+	
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static T? FirstOrDefault<T>(List<T> list, Predicate<T> predicate) => list.FirstOrDefaultFast(predicate);
+	}
+}
+
+public class MiscOptimizations : ClassWithFishPatches
+{
+	public class WindManager_WindManagerTick : FishPatch
+	{
+		public override string Description { get; }
+			= "Throttles plant sway to update at most once per frame instead of every tick. Also fixes the plant sway "
+			+ "setting to actually disable plant sway calculations when it should. By default it simply sets values to "
+			+ "0 but then still goes through everything, sacrificing tps for no reason";
+
+		public override Expression<Action> TargetMethod { get; } = static () => default(WindManager)!.WindManagerTick();
+
+		public static CodeInstructions Transpiler(CodeInstructions instructions)
 		{
-			var find_CurrentMap = FishTranspiler.CallPropertyGetter(typeof(Find), nameof(Find.CurrentMap));
+			var find_CurrentMap = FishTranspiler.PropertyGetter(typeof(Find), nameof(Find.CurrentMap));
 			var this_map = FishTranspiler.Field(typeof(WindManager), nameof(WindManager.map));
 
-			return codes.ReplaceAt(
-				(codes, i)
+			return instructions.ReplaceAt((codes, i)
 					=> i - 3 >= 0
 					&& codes[i - 3] == find_CurrentMap
 					&& codes[i - 1] == this_map
 					&& codes[i].operand is Label, // goto return;
-
-				code
+				static code
 					=> new[]
 					{
-						code,
-						FishTranspiler.Call(ShouldSway),
-						FishTranspiler.IfFalse_Short((Label)code.operand)
-					}
-				);
+						code, FishTranspiler.Call(ShouldSway), FishTranspiler.IfFalse_Short((Label)code.operand)
+					});
 		}
 
 		public static bool ShouldSway()
@@ -71,29 +95,101 @@ public class MiscOptimizations : ClassWithFishPatches
 		private static bool _lastPrefValue;
 	}
 
-	public class DrawBatch_Flush_Patch : FishPatch
+	public class CompRottable : FishPatch
 	{
-		public override string Description => "Optimization of a fleck rendering method. Low - medium performance impact";
-		public override Expression<Action> TargetMethod => () => default(DrawBatch)!.Flush(default);
+		public override string? Description { get; }
+			= "Throttles rotting on misconfigured defs to only recalculate every 256 ticks, instead of constantly.";
 
-		public static CodeInstructions? Transpiler(CodeInstructions CodeInstructions, ILGenerator generator)
+		public override MethodBase TargetMethodInfo { get; }
+			= AccessTools.Method(typeof(RimWorld.CompRottable), nameof(RimWorld.CompRottable.CompTick));
+
+		public static CodeInstructions Transpiler(CodeInstructions codes, ILGenerator generator)
+			=> Reflection.GetCodeInstructions(Replacement, generator);
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static void Replacement(RimWorld.CompRottable instance)
 		{
-			var codes = CodeInstructions.ToList();
+			if ((TickHelper.TicksGame & 255) == (instance.parent.thingIDNumber & 255))
+				instance.Tick(256);
+		}
+	}
 
-			var instance_tmpPropertyBlocks = FishTranspiler.Field(typeof(DrawBatch), nameof(DrawBatch.tmpPropertyBlocks));
-			var instance_tmpPropertyBlocks_instance_propertyBlockCache_AddRange = FishTranspiler.Call<Action<HashSet<DrawBatchPropertyBlock>, List<DrawBatchPropertyBlock>>>(GenCollection.AddRange);
-			var instance_tmpPropertyBlocks_key_propertyBlock_Add = FishTranspiler.Call(new HashSet<DrawBatchPropertyBlock>().Add);
+	public class RitualObligationTrigger_Date : FirstPriorityFishPatch
+	{
+		public override string? Description { get; }
+			= "Literally just reorders instructions in this method. They were nonsensical, discarding 90% of the "
+			+ "computation.";
+
+		public override MethodBase TargetMethodInfo { get; }
+			= AccessTools.Method(typeof(RimWorld.RitualObligationTrigger_Date),
+				nameof(RimWorld.RitualObligationTrigger_Date.Tick));
+
+		public static CodeInstructions Transpiler(CodeInstructions codes, ILGenerator generator)
+			=> Reflection.GetCodeInstructions(Replacement, generator);
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static void Replacement(RimWorld.RitualObligationTrigger_Date instance)
+		{
+			if (instance.ritual.isAnytime)
+				return;
+
+			if ((!instance.mustBePlayerIdeo || Faction.OfPlayerSilentFail.ideos.Has(instance.ritual.ideo))
+				&& instance.CurrentTickRelative() == instance.OccursOnTick())
+			{
+				instance.ritual.AddObligation(new(instance.ritual));
+			}
+		}
+	}
+
+	public class ReportProbablyMissingAttributesFix : FishPatch
+	{
+		public override string? Description { get; }
+			= """Fixes the "probably needs a StaticConstructorOnStartup attribute" log warning to display full """
+			+ "type names to help identify what mod it's actually from.";
+
+		public override MethodBase TargetMethodInfo { get; }
+			= AccessTools.FindIncludingInnerTypes(typeof(StaticConstructorOnStartupUtility),
+				static t => AccessTools.FirstMethod(t, static m
+					=> PatchProcessor.ReadMethodBody(m).Any(static pair
+						=> pair.Value is string text
+						&& text.Contains("probably needs a StaticConstructorOnStartup attribute"))));
+
+		public static CodeInstructions Transpiler(CodeInstructions codes)
+			=> codes.MethodReplacer(AccessTools.PropertyGetter(typeof(MemberInfo), nameof(MemberInfo.Name)),
+				methodof(Reflection.FullDescription));
+	}
+
+	public class DrawBatch_Flush : FishPatch
+	{
+		public override string Description { get; }
+			= "Optimization of a fleck rendering method. Low - medium performance impact";
+
+		public override Expression<Action> TargetMethod { get; } = static () => default(DrawBatch)!.Flush(default);
+
+		public static CodeInstructions? Transpiler(CodeInstructions codeInstructions, ILGenerator generator)
+		{
+			var codes = codeInstructions.ToList();
+
+			var instance_tmpPropertyBlocks
+				= FishTranspiler.Field(typeof(DrawBatch), nameof(DrawBatch.tmpPropertyBlocks));
+			var instance_tmpPropertyBlocks_instance_propertyBlockCache_AddRange
+				= FishTranspiler.Call<Action<HashSet<DrawBatchPropertyBlock>, List<DrawBatchPropertyBlock>>>(
+					GenCollection.AddRange);
+			var instance_tmpPropertyBlocks_key_propertyBlock_Add
+				= FishTranspiler.Call(new HashSet<DrawBatchPropertyBlock>().Add);
 
 			var label_inFrontOf_instance_batches_Clear = generator.DefineLabel();
-			var instance_batches_Clear = FishTranspiler.Call(new Dictionary<DrawBatch.BatchKey, List<DrawBatch.BatchData>>().Clear);
+			var instance_batches_Clear
+				= FishTranspiler.Call(new Dictionary<DrawBatch.BatchKey, List<DrawBatch.BatchData>>().Clear);
 
 			codes[
-				   codes.FindIndex(c => c == instance_batches_Clear)
-				   - 2
-				   ].labels.Add(label_inFrontOf_instance_batches_Clear);
+				codes.FindIndex(c => c == instance_batches_Clear)
+				- 2
+			].labels.Add(label_inFrontOf_instance_batches_Clear);
 
 			var instance_myPropertyBlocks = FishTranspiler.Field(typeof(DrawBatch), nameof(DrawBatch.myPropertyBlocks));
-			var instance_myPropertyBlocks_GetEnumerator = FishTranspiler.Call(new HashSet<DrawBatchPropertyBlock>().GetEnumerator);
+			var instance_myPropertyBlocks_GetEnumerator
+				= FishTranspiler.Call(new HashSet<DrawBatchPropertyBlock>().GetEnumerator);
 
 			var addRangeRemoved = false;
 			var addRemoved = false;
@@ -124,6 +220,7 @@ public class MiscOptimizations : ClassWithFishPatches
 					yield return FishTranspiler.Call(CheckFleckLeaks);
 					yield return FishTranspiler.IfFalse(label_inFrontOf_instance_batches_Clear);
 					yield return FishTranspiler.This;
+
 					checkFleckLeaksInserted = true;
 				}
 				else
@@ -133,47 +230,49 @@ public class MiscOptimizations : ClassWithFishPatches
 			}
 
 			if (!addRangeRemoved || !addRemoved || !checkFleckLeaksInserted)
-				Log.Error($"Performance Fish failed to apply its DrawBatch.Flush() patch. Mod Settings has an option to disable this");
+			{
+				Log.Error("Performance Fish failed to apply its DrawBatch.Flush() patch. Mod Settings has an "
+					+ "option to disable this");
+			}
 		}
 
 		public static bool CheckFleckLeaks(DrawBatch instance)
 		{
-			if (instance.myPropertyBlocks.Count != instance.propertyBlockCache.Count)
-			{
-				instance.tmpPropertyBlocks.AddRange(instance.propertyBlockCache);
-				return true;
-			}
-			return false;
+			if (instance.myPropertyBlocks.Count == instance.propertyBlockCache.Count)
+				return false;
+
+			instance.tmpPropertyBlocks.AddRange(instance.propertyBlockCache);
+			return true;
+
 		}
 
 #if whatItsGonnaLookLikeAfterTranspiling
 		public static void Flush(DrawBatch __instance, bool draw = true)
 		{
-			if (__instance.tmpPropertyBlock == null)
-				__instance.tmpPropertyBlock = new MaterialPropertyBlock();
+			__instance.tmpPropertyBlock ??= new();
 			__instance.tmpPropertyBlocks.Clear();
-//			__instance.tmpPropertyBlocks.AddRange(__instance.propertyBlockCache); // <--------------------------------------------------------- removed
+			// __instance.tmpPropertyBlocks.AddRange(__instance.propertyBlockCache); // <------------------------------- removed
 			try
 			{
-				foreach (var batch in __instance.batches)
+				foreach (var (batchKey, batchDatas) in __instance.batches)
 				{
-					var key = batch.Key;
 					try
 					{
-						foreach (var item in batch.Value)
+						foreach (var batchData in batchDatas)
 						{
-							var batchData = item;
 							if (draw)
 							{
 								__instance.tmpPropertyBlock.Clear();
-								if (key.propertyBlock != null)
-									key.propertyBlock.Write(__instance.tmpPropertyBlock);
-								if (key.renderInstanced)
+								batchKey.propertyBlock?.Write(__instance.tmpPropertyBlock);
+								if (batchKey.renderInstanced)
 								{
-									key.material.enableInstancing = true;
+									batchKey.material.enableInstancing = true;
 									if (batchData.hasAnyColors)
 										__instance.tmpPropertyBlock.SetVectorArray("_Color", batchData.colors);
-									Graphics.DrawMeshInstanced(key.mesh, 0, key.material, item.matrices, item.ptr, __instance.tmpPropertyBlock, UnityEngine.Rendering.ShadowCastingMode.On, receiveShadows: true, key.layer);
+									Graphics.DrawMeshInstanced(batchKey.mesh, 0, batchKey.material, batchData.matrices,
+										batchData.ptr,
+										__instance.tmpPropertyBlock, UnityEngine.Rendering.ShadowCastingMode.On,
+										receiveShadows: true, batchKey.layer);
 								}
 								else
 								{
@@ -183,39 +282,46 @@ public class MiscOptimizations : ClassWithFishPatches
 										var vector = batchData.colors[i];
 										if (batchData.hasAnyColors)
 											__instance.tmpPropertyBlock.SetColor("_Color", vector);
-										Graphics.DrawMesh(key.mesh, matrix, key.material, key.layer, null, 0, __instance.tmpPropertyBlock);
+										Graphics.DrawMesh(batchKey.mesh, matrix, batchKey.material, batchKey.layer,
+											null, 0,
+											__instance.tmpPropertyBlock);
 									}
 								}
 							}
+
 							batchData.Clear();
 							__instance.batchDataListCache.Add(batchData);
 						}
 					}
 					finally
 					{
-						if (key.propertyBlock != null && __instance.myPropertyBlocks.Contains(key.propertyBlock))
+						if (batchKey.propertyBlock != null && __instance.myPropertyBlocks.Contains(batchKey.propertyBlock))
 						{
-//							__instance.tmpPropertyBlocks.Add(key.propertyBlock); // <---------------------------------------------------------- removed
-							key.propertyBlock.Clear();
-							__instance.propertyBlockCache.Add(key.propertyBlock);
+							// __instance.tmpPropertyBlocks.Add(key.propertyBlock); // <-------------------------------- removed
+							batchKey.propertyBlock.Clear();
+							__instance.propertyBlockCache.Add(batchKey.propertyBlock);
 						}
-						__instance.batchListCache.Add(batch.Value);
-						batch.Value.Clear();
+
+						__instance.batchListCache.Add(batchDatas);
+						batchDatas.Clear();
 					}
 				}
 			}
 			finally
 			{
-				if (CheckFleckLeaks(__instance)) // <------------------------------------------------------------------------------------------ added
+				if (CheckFleckLeaks(__instance)) // <------------------------------------------------------------------- added
 				{
 					foreach (var myPropertyBlock in __instance.myPropertyBlocks)
 					{
 						if (!__instance.tmpPropertyBlocks.Contains(myPropertyBlock))
-							Log.Warning("Property block from FleckDrawBatch leaked!" + ((myPropertyBlock.leakDebugString == null) ? null : ("Leak debug information: \n" + myPropertyBlock.leakDebugString)));
+							Log.Warning("Property block from FleckDrawBatch leaked!"
+								+ ((myPropertyBlock.leakDebugString == null)
+									? null
+									: ("Leak debug information: \n" + myPropertyBlock.leakDebugString)));
 					}
-					var hashSet = __instance.myPropertyBlocks;
-					__instance.myPropertyBlocks = __instance.tmpPropertyBlocks;
-					__instance.tmpPropertyBlocks = hashSet;
+
+					(__instance.myPropertyBlocks, __instance.tmpPropertyBlocks)
+						= (__instance.tmpPropertyBlocks, __instance.myPropertyBlocks);
 				}
 
 				__instance.batches.Clear();

@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -8,7 +8,8 @@ public class GenDrawPatches : ClassWithFishPatches
 {
 	public class DrawMeshNowOrLater_Patch : FishPatch
 	{
-		public override Delegate TargetMethodGroup => (Action<Mesh, Vector3, Quaternion, Material, bool>)GenDraw.DrawMeshNowOrLater;
+		public override Delegate TargetMethodGroup { get; }
+			= (Action<Mesh, Vector3, Quaternion, Material, bool>)GenDraw.DrawMeshNowOrLater;
 
 		public static void Replacement(Mesh mesh, Vector3 loc, Quaternion quat, Material mat, bool drawNow)
 		{
@@ -27,7 +28,8 @@ public class GenDrawPatches : ClassWithFishPatches
 
 	public class DrawMeshNowOrLaterWithMatrix_Patch : FishPatch
 	{
-		public override Delegate TargetMethodGroup => (Action<Mesh, Matrix4x4, Material, bool>)GenDraw.DrawMeshNowOrLater;
+		public override Delegate TargetMethodGroup { get; }
+			= (Action<Mesh, Matrix4x4, Material, bool>)GenDraw.DrawMeshNowOrLater;
 
 		public static void Replacement(Mesh mesh, Matrix4x4 matrix, Material mat, bool drawNow)
 		{

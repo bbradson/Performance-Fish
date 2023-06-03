@@ -58,8 +58,30 @@
 	</Choose>
 	<ItemGroup>
 		<PackageReference Include="Lib.Harmony" Version="2.*" />
+		<PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.*" />
+		<PackageReference Include="Krafs.Publicizer" Version="2.*" />
+		
+		<Publicize Include="Assembly-CSharp;0Harmony" IncludeVirtualMembers="false" />
+		<Publicize Include="Assembly-CSharp:RimWorld.JobGiver_Haul.TryGiveJob" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.IgnoresAccessChecksToAttribute" />
+		<DoNotPublicize Include="0Harmony:Mono.Collections.Generic.Collection`1" />
+		<Publicize Include="mscorlib:System.Collections.Generic.Dictionary`2.buckets" />
+		<Publicize Include="mscorlib:System.Collections.Generic.Dictionary`2.entries" />
+		<Publicize Include="mscorlib:System.Collections.Generic.Dictionary`2.version" />
+		<Publicize Include="mscorlib:System.Collections.Generic.Dictionary`2+Entry" />
+		<Publicize Include="mscorlib:System.Collections.Generic.List`1._items" />
+		<Publicize Include="mscorlib:System.Collections.Generic.List`1._version" />
+		<Publicize Include="mscorlib:System.Collections.Generic.List`1._size" />
+		<Publicize Include="mscorlib:System.Collections.Generic.List`1.EnsureCapacity" />
+		<Publicize Include="System.Core:System.Collections.Generic.HashSet`1._version" />
+		<Publicize Include="mscorlib:System.MonoCustomAttrs.GetCustomAttributes" />
+		<Publicize Include="mscorlib:System.RuntimeType" />
+		<Publicize Include="mscorlib:System.Reflection.MonoField" />
+		<Publicize Include="mscorlib:System.String.m_firstChar" />
+		
 		<PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.*" />
 		<PackageReference Include="xunit" Version="2.*" />
+		<PackageReference Include="xunit.analyzers" Version="1.*" />
 		<PackageReference Include="xunit.runner.visualstudio" Version="2.*">
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 			<PrivateAssets>all</PrivateAssets>

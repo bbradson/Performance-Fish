@@ -5,23 +5,36 @@
 		<LangVersion>preview</LangVersion>
 		<PlatformTarget>AnyCPU</PlatformTarget>
 		<Optimize>true</Optimize>
-		<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 		<Authors>bradson</Authors>
-		<Copyright>Copyright (c) 2021 bradson</Copyright>
+		<Copyright>Copyright (c) 2023 bradson</Copyright>
 		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 		<EnableNETAnalyzers>True</EnableNETAnalyzers>
 		<AnalysisLevel>preview-all</AnalysisLevel>
-		<DebugType>none</DebugType>
+		<DebugSymbols>true</DebugSymbols>
+		<DebugType>portable</DebugType>
 		<ErrorReport>prompt</ErrorReport>
 		<WarningLevel>5</WarningLevel>
 		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-		<Configurations>v1.3;v1.4</Configurations>
+		<Configurations>v1.4;v1.3</Configurations>
+		<Version>0.3.800.85</Version>
+		<NoWarn>1701;1702;IL2121;CS8500;CS9082</NoWarn>
 	</PropertyGroup>
 	<Choose>
+		<When Condition="'$(Configuration)' == 'v1.4'">
+			<PropertyGroup>
+				<OutDir>..\..\1.4\Assemblies\</OutDir>
+			</PropertyGroup>
+			<ItemGroup>
+				<PackageReference Include="Krafs.Rimworld.Ref" Version="1.4.*" />
+				<Reference Include="1Fishery">
+					<HintPath>..\..\..\Fishery\1.4\Assemblies\1Fishery.dll</HintPath>
+				</Reference>
+			</ItemGroup>
+		</When>
 		<When Condition="'$(Configuration)' == 'v1.3'">
 			<PropertyGroup>
-				<OutputPath>..\..\1.3\Assemblies\</OutputPath>
+				<OutDir>..\..\1.3\Assemblies\</OutDir>
 			</PropertyGroup>
 			<ItemGroup>
 				<PackageReference Include="Krafs.Rimworld.Ref" Version="1.3.*" />
@@ -30,25 +43,21 @@
 				</Reference>
 			</ItemGroup>
 		</When>
-		<When Condition="'$(Configuration)' == 'v1.4'">
-			<PropertyGroup>
-				<OutputPath>..\..\1.4\Assemblies\</OutputPath>
-			</PropertyGroup>
-			<ItemGroup>
-				<PackageReference Include="Krafs.Rimworld.Ref" Version="1.4.*-*" />
-				<Reference Include="1Fishery">
-					<HintPath>..\..\..\Fishery\1.4\Assemblies\1Fishery.dll</HintPath>
-				</Reference>
-			</ItemGroup>
-		</When>
 	</Choose>
 	<ItemGroup>
 		<PackageReference Include="Lib.Harmony" Version="2.*" ExcludeAssets="runtime" />
+		<PackageReference Include="Zetrith.Prepatcher" Version="1.*" />
 		<PackageReference Include="Krafs.Publicizer" Version="2.*" />
 		<PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.*" /><!-- Version included in Unity is missing IsNullRef -->
-		<PackageReference Include="Nullable" Version="1.*" />
-		<PackageReference Include="IndexRange" Version="1.*" ExcludeAssets="runtime" />
-		<Publicize Include="Assembly-CSharp" />
+		<PackageReference Include="PolySharp" Version="1.*" />
+		<PackageReference Include="JetBrains.Annotations" Version="2022.*" Aliases="nuget" ExcludeAssets="runtime" />
+		<!-- PackageReference Include="Mono.Cecil" Version="0.*" /-->
+		<!-- PackageReference Include="Mono.Reflection" Version="2.*" /-->
+		
+		<Publicize Include="Assembly-CSharp;0Harmony" IncludeVirtualMembers="false" />
+		<Publicize Include="Assembly-CSharp:RimWorld.JobGiver_Haul.TryGiveJob" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.IgnoresAccessChecksToAttribute" />
+		<DoNotPublicize Include="0Harmony:Mono.Collections.Generic.Collection`1" />
 		<Publicize Include="mscorlib:System.Collections.Generic.Dictionary`2.buckets" />
 		<Publicize Include="mscorlib:System.Collections.Generic.Dictionary`2.entries" />
 		<Publicize Include="mscorlib:System.Collections.Generic.Dictionary`2.version" />
@@ -56,12 +65,23 @@
 		<Publicize Include="mscorlib:System.Collections.Generic.List`1._items" />
 		<Publicize Include="mscorlib:System.Collections.Generic.List`1._version" />
 		<Publicize Include="mscorlib:System.Collections.Generic.List`1._size" />
-		<Publicize Include="mscorlib:System.Runtime.CompilerServices.JitHelpers.UnsafeEnumCast" />
-		<Publicize Include="mscorlib:System.Runtime.CompilerServices.JitHelpers.UnsafeEnumCastLong" />
-		<Publicize Include="mscorlib:System.Runtime.CompilerServices.JitHelpers.UnsafeCast" />
+		<Publicize Include="mscorlib:System.Collections.Generic.List`1.EnsureCapacity" />
+		<Publicize Include="System.Core:System.Collections.Generic.HashSet`1._version" />
+		<Publicize Include="mscorlib:System.MonoCustomAttrs.GetCustomAttributes" />
+		<Publicize Include="mscorlib:System.RuntimeType" />
+		<Publicize Include="mscorlib:System.Reflection.MonoField" />
+		<Publicize Include="mscorlib:System.String.m_firstChar" />
+		
 		<None Include="..\..\LICENSE">
 			<Pack>True</Pack>
-			<PackagePath></PackagePath>
+			<PackagePath />
 		</None>
 	</ItemGroup>
+	<Target Name="ChangeAliasesOfStrongNameAssemblies" BeforeTargets="FindReferenceAssembliesForReferences;ResolveReferences">
+		<ItemGroup>
+			<ReferencePath Condition="'%(FileName)' == 'JetBrains.Annotations'">
+				<Aliases>nuget</Aliases><!-- Rider bug, the earlier Aliases="nuget" attribute should cover this -->
+			</ReferencePath>
+		</ItemGroup>
+	</Target>
 </Project>

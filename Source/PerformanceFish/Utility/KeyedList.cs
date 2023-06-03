@@ -1,17 +1,27 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
+using JetBrains.Annotations;
 
 namespace PerformanceFish.Utility;
 
+[PublicAPI]
 public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictionary<TKey, TValue>
 {
-	public IList<TKey> Keys { get; }
-	public IList<TValue> Values { get; }
+	public IList<TKey> Keys
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get;
+	}
+
+	public IList<TValue> Values
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get;
+	}
 
 	public KeyedList()
 	{
@@ -33,16 +43,16 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 
 	public TValue this[TKey key]
 	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		get
 		{
 			Guard.IsNotNull(key);
 
 			var items = _items;
-			for (var i = 0; i < Count; i++)
+			for (var i = Count - 1; i >= 0; i--)
 			{
-				var (itemKey, itemValue) = items[i];
-				if (GetKeyComparer().Equals(itemKey, key))
-					return itemValue;
+				if (items[i].Key.Equals<TKey>(key))
+					return items[i].Value;
 			}
 
 			return ThrowHelperF.ThrowKeyNotFoundException<TKey, TValue>(key);
@@ -52,14 +62,14 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 			Guard.IsNotNull(key);
 
 			var items = _items;
-			for (var i = 0; i < Count; i++)
+			for (var i = Count - 1; i >= 0; i--)
 			{
 				ref var item = ref items[i];
-				if (GetKeyComparer().Equals(item.Key, key))
-				{
-					item = new(item.Key, value);
-					return;
-				}
+				if (!item.Key.Equals<TKey>(key))
+					continue;
+
+				item = new(item.Key, value);
+				return;
 			}
 
 			Add(new(key, value));
@@ -68,29 +78,31 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 
 	public void Add(TKey key, TValue value) => Add(new(key, value));
 
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public bool ContainsKey(TKey item)
 	{
 		Guard.IsNotNull(item);
 
 		var items = _items;
-		for (var i = 0; i < Count; i++)
+		for (var i = Count - 1; i >= 0; i--)
 		{
-			if (GetKeyComparer().Equals(items[i].Key, item))
+			if (items[i].Key.Equals<TKey>(item))
 				return true;
 		}
 
 		return false;
 	}
 
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public bool ContainsValue(TValue item)
 	{
 		if (item is null)
 			return false;
 
 		var items = _items;
-		for (var i = 0; i < Count; i++)
+		for (var i = Count - 1; i >= 0; i--)
 		{
-			if (GetValueComparer().Equals(items[i].Value, item))
+			if (items[i].Value.Equals<TValue>(item))
 				return true;
 		}
 
@@ -98,20 +110,24 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 	}
 
 #pragma warning disable CS8767 // missing nullable on IDictionary interface
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public bool TryGetValue(TKey key, out TValue? value)
 #pragma warning restore CS8767
 	{
 		Guard.IsNotNull(key);
-
-		var index = IndexOfKey(key);
-		if (index < 0)
+		
+		var items = _items;
+		for (var i = Count - 1; i >= 0; i--)
 		{
-			value = default;
-			return false;
+			if (!items[i].Key.Equals<TKey>(key))
+				continue;
+
+			value = items[i].Value;
+			return true;
 		}
 
-		value = _items[index].Value;
-		return true;
+		value = default;
+		return false;
 	}
 
 	public void CopyTo(TKey[] array, int arrayIndex)
@@ -122,6 +138,7 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 		for (var i = 0; i < Count; i++)
 			array[i + arrayIndex] = items[i].Key;
 	}
+
 	public void CopyTo(TValue[] array, int arrayIndex)
 	{
 		CanCopyTo(array, arrayIndex);
@@ -160,26 +177,28 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 		return true;
 	}
 
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public int IndexOfKey(TKey key)
 	{
 		Guard.IsNotNull(key);
 
 		var items = _items;
-		for (var i = 0; i < Count; i++)
+		for (var i = Count - 1; i >= 0; i--)
 		{
-			if (GetKeyComparer().Equals(items[i].Key, key))
+			if (items[i].Key.Equals<TKey>(key))
 				return i;
 		}
 
 		return -1;
 	}
 
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public int IndexOfValue(TValue value)
 	{
 		var items = _items;
-		for (var i = 0; i < Count; i++)
+		for (var i = Count - 1; i >= 0; i--)
 		{
-			if (GetValueComparer().Equals(items[i].Value, value))
+			if (items[i].Value.Equals<TValue>(value))
 				return i;
 		}
 
@@ -190,16 +209,21 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 	{
 		private readonly KeyedList<TKey, TValue> _list;
 
-		public KeyCollection(KeyedList<TKey, TValue> list)
-			=> _list = list;
+		public KeyCollection(KeyedList<TKey, TValue> list) => _list = list;
 
 		public TKey this[int index]
 		{
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			get => _list[index].Key;
+			// ReSharper disable once ValueParameterNotUsed
 			set => ThrowHelper.ThrowNotSupportedException();
 		}
 
-		public int Count => _list.Count;
+		public int Count
+		{
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			get => _list.Count;
+		}
 
 		public bool IsReadOnly => false;
 
@@ -207,6 +231,7 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 
 		public void Clear() => _list.Clear();
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public bool Contains(TKey item) => _list.ContainsKey(item);
 
 		public void CopyTo(TKey[] array, int arrayIndex)
@@ -218,6 +243,7 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 				array[i + arrayIndex] = items[i].Key;
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public IEnumerator<TKey> GetEnumerator()
 		{
 			var items = _list._items;
@@ -225,6 +251,7 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 				yield return items[i].Key;
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public int IndexOf(TKey item) => _list.IndexOfKey(item);
 
 		public void Insert(int index, TKey item) => ThrowHelper.ThrowNotSupportedException();
@@ -240,11 +267,11 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 	{
 		private readonly KeyedList<TKey, TValue> _list;
 
-		public ValueCollection(KeyedList<TKey, TValue> list)
-			=> _list = list;
+		public ValueCollection(KeyedList<TKey, TValue> list) => _list = list;
 
 		public TValue this[int index]
 		{
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			get => _list[index].Value;
 			set
 			{
@@ -253,7 +280,11 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 			}
 		}
 
-		public int Count => _list.Count;
+		public int Count
+		{
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			get => _list.Count;
+		}
 
 		public bool IsReadOnly => false;
 
@@ -261,6 +292,7 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 
 		public void Clear() => _list.Clear();
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public bool Contains(TValue item) => _list.ContainsValue(item);
 
 		public void CopyTo(TValue[] array, int arrayIndex)
@@ -272,6 +304,7 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 				array[i + arrayIndex] = items[i].Value;
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public IEnumerator<TValue> GetEnumerator()
 		{
 			var items = _list._items;
@@ -279,6 +312,7 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 				yield return items[i].Value;
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public int IndexOf(TValue item) => _list.IndexOfValue(item);
 
 		public void Insert(int index, TValue item) => ThrowHelper.ThrowNotSupportedException();
@@ -289,12 +323,6 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 
 		IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 	}
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	protected static IEqualityComparer<TKey> GetKeyComparer() => EqualityComparer<TKey>.Default;
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	protected static IEqualityComparer<TValue> GetValueComparer() => EqualityComparer<TValue>.Default;
 
 	ICollection<TKey> IDictionary<TKey, TValue>.Keys => Keys;
 	ICollection<TValue> IDictionary<TKey, TValue>.Values => Values;
@@ -307,8 +335,7 @@ public class KeyedList<TKey, TValue> : List<KeyValuePair<TKey, TValue>>, IDictio
 	protected static class ThrowHelperF
 	{
 		[DoesNotReturn]
-		internal static V ThrowKeyNotFoundException<T, V>(T key)
-			=> throw GetKeyNotFoundException(key);
+		internal static V ThrowKeyNotFoundException<T, V>(T key) => throw GetKeyNotFoundException(key);
 
 		[DoesNotReturn]
 		internal static void ThrowKeyNotFoundException<T>(T key)

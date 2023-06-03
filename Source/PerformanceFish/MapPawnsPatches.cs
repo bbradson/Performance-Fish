@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -12,6 +12,7 @@ public static class MapPawnsPatches
 		List<Pawn> allPawnsUnspawned = instance.AllPawnsUnspawned;
 		if (allPawnsUnspawned.Count == 0)
 			return instance.pawnsSpawned;
+
 		instance.allPawnsResult.Clear();
 		instance.allPawnsResult.AddRange(instance.pawnsSpawned);
 		instance.allPawnsResult.AddRange(allPawnsUnspawned);
@@ -21,12 +22,14 @@ public static class MapPawnsPatches
 	public static List<Pawn> AllPawnsUnspawned(MapPawns instance)
 	{
 		instance.allPawnsUnspawnedResult.Clear();
-		ThingOwnerUtility.GetAllThingsRecursively(instance.map, ThingRequest.ForGroup(ThingRequestGroup.Pawn), instance.allPawnsUnspawnedResult, allowUnreal: true, null, alsoGetSpawnedThings: false);
+		ThingOwnerUtility.GetAllThingsRecursively(instance.map, ThingRequest.ForGroup(ThingRequestGroup.Pawn),
+			instance.allPawnsUnspawnedResult, allowUnreal: true, null, alsoGetSpawnedThings: false);
 		for (int num = instance.allPawnsUnspawnedResult.Count - 1; num >= 0; num--)
 		{
 			if (instance.allPawnsUnspawnedResult[num].Dead)
 				instance.allPawnsUnspawnedResult.RemoveAt(num);
 		}
+
 		return instance.allPawnsUnspawnedResult;
 	}
 
@@ -37,11 +40,13 @@ public static class MapPawnsPatches
 			Log.Error("Called PawnsInFaction with null faction.");
 			return new List<Pawn>();
 		}
+
 		if (!instance.pawnsInFactionResult.TryGetValue(faction, out var value))
 		{
 			value = new List<Pawn>();
 			instance.pawnsInFactionResult.Add(faction, value);
 		}
+
 		value.Clear();
 		var allPawns = instance.AllPawns;
 		for (var i = 0; i < allPawns.Count; i++)
@@ -49,6 +54,7 @@ public static class MapPawnsPatches
 			if (allPawns[i].Faction == faction)
 				value.Add(allPawns[i]);
 		}
+
 		return value;
 	}
 
@@ -59,13 +65,17 @@ public static class MapPawnsPatches
 			value = new List<Pawn>();
 			instance.freeHumanlikesOfFactionResult.Add(faction, value);
 		}
+
 		value.Clear();
 		List<Pawn> allPawns = instance.AllPawns;
 		for (int i = 0; i < allPawns.Count; i++)
 		{
-			if (allPawns[i].Faction == faction && (allPawns[i].HostFaction == null || allPawns[i].IsSlave) && allPawns[i].RaceProps.Humanlike)
+			if (allPawns[i].Faction == faction
+				&& (allPawns[i].HostFaction == null || allPawns[i].IsSlave)
+				&& allPawns[i].RaceProps.Humanlike)
 				value.Add(allPawns[i]);
 		}
+
 		return value;
 	}
 

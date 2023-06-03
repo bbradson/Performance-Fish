@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -9,15 +9,21 @@ using System.Linq;
 namespace PerformanceFish.Cache;
 public class ByIndex<T_out> : IList<T_out?>, ICollection
 {
-	private static ByIndex<T_out> _get = new();
+	private static ByIndex<T_out> _get = Utility.AddNew<ByIndex<T_out>>();
 	[ThreadStatic]
 	private static ByIndex<T_out>? _getThreadStatic;
 
 	public static ByIndex<T_out> Get
-		=> /*UnityData.IsInMainThread ? _get
-		:*/ _getThreadStatic ??= Utility.AddNew<ByIndex<T_out>>();
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _getThreadStatic ??= Utility.AddNew<ByIndex<T_out>>();
+	}
 
-	public static ByIndex<T_out> GetDirectly => _get;
+	public static ByIndex<T_out> GetDirectly
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _get;
+	}
 
 	static ByIndex() => Utility.All.Add(_get);
 
@@ -112,15 +118,21 @@ public class ByIndex<T_out> : IList<T_out?>, ICollection
 public class ByIndex<T_in, T_out> : ByIndex<T_out>
 	where T_in : notnull
 {
-	private static ByIndex<T_in, T_out> _get = new();
+	private static ByIndex<T_in, T_out> _get = Utility.AddNew<ByIndex<T_in, T_out>>();
 	[ThreadStatic]
 	private static ByIndex<T_in, T_out>? _getThreadStatic;
 
 	public new static ByIndex<T_in, T_out> Get
-		=> /*UnityData.IsInMainThread ? _get
-		:*/ _getThreadStatic ??= Utility.AddNew<ByIndex<T_in, T_out>>();
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _getThreadStatic ??= Utility.AddNew<ByIndex<T_in, T_out>>();
+	}
 
-	public new static ByIndex<T_in, T_out> GetDirectly => _get;
+	public new static ByIndex<T_in, T_out> GetDirectly
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _get;
+	}
 
 	static ByIndex() => Utility.All.Add(_get);
 
@@ -142,7 +154,6 @@ public class ByIndex<T_in, T_out> : ByIndex<T_out>
 	[return: MaybeNull]
 	public unsafe ref T_out GetReference(T_in key)
 		=> ref GetReference(FunctionPointers.IndexGetter<T_in>.Default(key))!;
-
 }
 
 /// <summary>
@@ -151,15 +162,21 @@ public class ByIndex<T_in, T_out> : ByIndex<T_out>
 public class ByIndex<T_first, T_second, T_out> : ByIndex<T_first, ByIndex<T_second, T_out>>
 	where T_first : notnull where T_second : notnull
 {
-	private static ByIndex<T_first, T_second, T_out> _get = new();
+	private static ByIndex<T_first, T_second, T_out> _get = Utility.AddNew<ByIndex<T_first, T_second, T_out>>();
 	[ThreadStatic]
 	private static ByIndex<T_first, T_second, T_out>? _getThreadStatic;
 
 	public new static ByIndex<T_first, T_second, T_out> Get
-		=> /*UnityData.IsInMainThread ? _get
-		:*/ _getThreadStatic ??= Utility.AddNew<ByIndex<T_first, T_second, T_out>>();
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _getThreadStatic ??= Utility.AddNew<ByIndex<T_first, T_second, T_out>>();
+	}
 
-	public new static ByIndex<T_first, T_second, T_out> GetDirectly => _get;
+	public new static ByIndex<T_first, T_second, T_out> GetDirectly
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _get;
+	}
 
 	static ByIndex() => Utility.All.Add(_get);
 
@@ -179,7 +196,7 @@ public class ByIndex<T_first, T_second, T_out> : ByIndex<T_first, ByIndex<T_seco
 		ref var inner = ref _items[firstIndex];
 		inner ??= new();
 
-		return inner!;
+		return inner;
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]

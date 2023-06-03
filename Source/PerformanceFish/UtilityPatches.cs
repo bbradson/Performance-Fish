@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -9,11 +9,18 @@ public class UtilityPatches : ClassWithFishPatches
 {
 	public class FinalizeInit_Patch : FishPatch
 	{
-		public override string Description => "Necessary for patches that require a loaded game to function";
-		public override Expression<Action> TargetMethod => () => default(Game)!.FinalizeInit();
+		public override bool Enabled => true;
+
+		public override string Description { get; }
+			= "Necessary for patches that require a loaded game to function";
+		
+		public override MethodBase TargetMethodInfo { get; }
+			= AccessTools.Method(typeof(Game), nameof(Game.FinalizeInit));
+
+		[HarmonyPriority(Priority.VeryLow)]
 		public static void Postfix()
 		{
-			foreach (var patch in PerformanceFishMod.AllPatchClasses)
+			foreach (var patch in PerformanceFishMod.AllPatchClasses!)
 			{
 				if (patch.RequiresLoadedGameForPatching)
 					patch.Patches.PatchAll();
@@ -26,12 +33,19 @@ public class UtilityPatches : ClassWithFishPatches
 
 	public class ClearAllMapsAndWorld_Patch : FishPatch
 	{
-		public override string Description => "A patch to make the game clear all Performance Fish caches whenever saves get unloaded, to avoid anything getting carried over to a new game by mistake";
+		public override bool Enabled => true;
+
+		public override string Description { get; }
+			= "A patch to make the game clear all Performance Fish caches whenever saves get unloaded, to avoid "
+			+ "anything getting carried over to a new game by mistake";
+
 		public override Delegate TargetMethodGroup => Verse.Profile.MemoryUtility.ClearAllMapsAndWorld;
+
+		[HarmonyPriority(Priority.VeryLow)]
 		public static void Postfix()
 		{
 			Cache.Utility.Clear();
-			foreach (var patch in PerformanceFishMod.AllPatchClasses)
+			foreach (var patch in PerformanceFishMod.AllPatchClasses!)
 			{
 				if (patch.RequiresLoadedGameForPatching)
 					patch.Patches.UnpatchAll();

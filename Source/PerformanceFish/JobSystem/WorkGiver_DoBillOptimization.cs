@@ -1,40 +1,61 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection.Emit;
 using Verse.AI;
-using IngredientCacheList = PerformanceFish.Utility.KeyedList<Verse.IngredientCount, (System.Collections.Generic.List<Verse.ThingDef> Defs, bool Found)>;
-using RecipeIngredientCache = PerformanceFish.Cache.ByIndex<RimWorld.Bill, PerformanceFish.JobSystem.WorkGiver_DoBillOptimization.RecipeIngredientCacheValue>;
+using IngredientCacheList
+	= PerformanceFish.Utility.KeyedList<Verse.IngredientCount, (System.Collections.Generic.List<Verse.ThingDef> Defs,
+		bool Found)>;
+using RecipeIngredientCache
+	= PerformanceFish.Cache.ByIndex<RimWorld.Bill,
+		PerformanceFish.JobSystem.WorkGiver_DoBillOptimization.RecipeIngredientCacheValue>;
 
 namespace PerformanceFish.JobSystem;
 
 public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 {
-	public static List<Type> BlackListedModExtensions => _blackListedModExtensions ??= new() { Reflection.Type("VFEAncients", "VFEAncients.RecipeExtension_Mend") };
-	private static List<Type>? _blackListedModExtensions;
+	public static List<Type?> BlackListedModExtensions
+		=> _blackListedModExtensions ??= new() { Reflection.Type("VFEAncients", "VFEAncients.RecipeExtension_Mend") };
 
-	public class TryFindBestIngredientsHelper_InnerDelegate_Patch : FishPatch
+	private static List<Type?>? _blackListedModExtensions;
+
+	public class TryFindBestIngredientsHelper_InnerDelegate_Patch : FirstPriorityFishPatch
 	{
-		public override string Description => "Optimizes WorkGiver_DoBill to only check things that get accepted by a bill's filter for its ingredient lookup, instead of looping over everything and then checking filters afterwards. " +
-			"Also caches these filter acceptances. Large performance impact.";
+		public override string Description { get; }
+			= "Optimizes WorkGiver_DoBill to only check things that get accepted by a bill's filter for its "
+			+ "ingredient lookup, instead of looping over everything and then checking filters afterwards. "
+			+ "Also caches these filter acceptances. Large performance impact.";
 
-		public override MethodBase TargetMethodInfo
-			=> AccessTools.FirstMethod(DelegateInstanceType, m
-				=> m.GetParameters() is { Length: 1 } parms
-				&& parms[0].ParameterType == typeof(Region)
+		public override bool Enabled
+		{
+			set
+			{
+				if (base.Enabled == value)
+					return;
+
+				Get<TryFindBestIngredientsHelper_Patch>().Enabled
+					= Get<TryFindBestIngredientsInSet_NoMixHelper_Patch>().Enabled
+						= base.Enabled = value;
+			}
+		}
+
+		public override MethodBase TargetMethodInfo { get; }
+			= AccessTools.FirstMethod(DelegateInstanceType, static m
+				=> m.GetParameters() is { Length: 1 } parameterInfos
+				&& parameterInfos[0].ParameterType == typeof(Region)
 				&& m.ReturnType == typeof(bool)
-				&& PatchProcessor.ReadMethodBody(m).Any(pair
-					=> (pair.Key == OpCodes.Call || pair.Key == OpCodes.Callvirt)
-					&& pair.Value is MethodInfo info
+				&& MethodBodyReader.GetInstructions(null, m).Any(static instruction
+					=> (instruction.opcode == OpCodes.Call || instruction.opcode == OpCodes.Callvirt)
+					&& instruction.operand is MethodInfo info
 					&& info == AccessTools.Method(typeof(ListerThings), nameof(ListerThings.ThingsMatching))));
 
-		public static CodeInstructions Transpiler(CodeInstructions CodeInstructions, MethodBase method)
-			=> Reflection.MakeReplacementCall(
-				   AccessTools.Method(typeof(TryFindBestIngredientsHelper_InnerDelegate_Patch), nameof(Replacement), generics: new[] { DelegateInstanceType }));
+		public static CodeInstructions Transpiler(CodeInstructions codeInstructions, MethodBase method)
+			=> Reflection.MakeReplacementCall(AccessTools.Method(
+				typeof(TryFindBestIngredientsHelper_InnerDelegate_Patch), nameof(Replacement),
+				generics: new[] { DelegateInstanceType }));
 
 		public static bool Replacement<T>(T __instance, Region r) where T : class
 		{
@@ -54,46 +75,47 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 #if V1_4
 					|| bill.billStack?.billGiver is Building_MechGestator
 #endif
-					|| (BlackListedModExtensions.Exists(b => b != null) && IsBlackListed(bill)))  // <-- Fuck these too
+					|| (BlackListedModExtensions.Exists(static b => b != null)
+						&& IsBlackListed(bill))) // <-- Fuck these too
 				{
 					list = GetDefaultList(r);
 				}
 				else
 				{
 					ref var cache = ref RecipeIngredientCache.Get.GetReference(bill);
-					if (cache.thingDefs is null || cache.ShouldRefreshNow)
+					if (cache.thingDefs is null || cache.Dirty)
 					{
 						cache.thingDefs = UpdateCache(bill, r, cache.thingDefs);
-						cache.ShouldRefreshNow = false;
-						RecipeIngredientCache.Get[bill] = cache;
+						cache.Update(bill);
 					}
+
 					list = GetList(r.listerThings.listsByDef, cache.thingDefs);
 				}
 			}
 
 			ActualLoop(list, r, instance.Pawn, instance.BaseValidator, instance.BillGiverIsPawn);
 
-			//list.Clear();
-
 			instance.RegionsProcessed++;
-			if (WorkGiver_DoBill.newRelevantThings.Count > 0 && instance.RegionsProcessed > instance.AdjacentRegionsAvailable)
-			{
-				//WorkGiver_DoBill.relevantThings.AddRange(WorkGiver_DoBill.newRelevantThings);
-				InsertAtCorrectPosition(WorkGiver_DoBill.relevantThings, WorkGiver_DoBill.newRelevantThings, instance.Pawn);
+			if (WorkGiver_DoBill.newRelevantThings.Count <= 0
+				|| instance.RegionsProcessed <= instance.AdjacentRegionsAvailable)
+				return false;
 
-				WorkGiver_DoBill.newRelevantThings.Clear();
-				if (instance.FoundAllIngredientsAndChoose(WorkGiver_DoBill.relevantThings))
-				{
-					instance.FoundAll = true;
-					return true;
-				}
-			}
-			return false;
+			//WorkGiver_DoBill.relevantThings.AddRange(WorkGiver_DoBill.newRelevantThings);
+			InsertAtCorrectPosition(WorkGiver_DoBill.relevantThings, WorkGiver_DoBill.newRelevantThings,
+				instance.Pawn);
+
+			WorkGiver_DoBill.newRelevantThings.Clear();
+			if (!instance.FoundAllIngredientsAndChoose(WorkGiver_DoBill.relevantThings))
+				return false;
+
+			instance.FoundAll = true;
+			return true;
+
 		}
 
 		private static bool HasNoFilters(Bill bill)
 			=> bill.ingredientFilter is null
-			|| bill.recipe.fixedIngredientFilter is null;
+				|| bill.recipe.fixedIngredientFilter is null;
 
 		/*private static bool HasNoFilters(Bill bill)
 		{
@@ -113,13 +135,13 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 			return false;
 		}*/
 
-		private static bool IsBlackListed(Bill bill)
+		private static bool IsBlackListed(Bill? bill)
 			=> bill is null
-			|| (bill.recipe.modExtensions?.Exists(e
-				=> BlackListedModExtensions.Contains(e.GetType()))
-			?? false);
+				|| bill.recipe.modExtensions.ExistsAndNotNull(static e
+						=> BlackListedModExtensions.Contains(e.GetType()));
 
-		private static List<Thing> GetDefaultList(Region r) => r.ListerThings.ThingsMatching(ThingRequest.ForGroup(ThingRequestGroup.HaulableEver));
+		private static List<Thing> GetDefaultList(Region r)
+			=> r.ListerThings.ThingsMatching(ThingRequest.ForGroup(ThingRequestGroup.HaulableEver));
 
 		public static void InsertAtCorrectPosition(List<Thing> list, List<Thing> thingsToInsert, Pawn pawn)
 		{
@@ -139,18 +161,24 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 
 		private static readonly ThingPositionComparer _insertAtCorrectPositionComparer = new();
 
-		public static void ActualLoop(List<Thing> list, Region r, Pawn pawn, Predicate<Thing> baseValidator, bool billGiverIsPawn)
+		public static void ActualLoop(List<Thing> list, Region r, Pawn pawn, Predicate<Thing> baseValidator,
+			bool billGiverIsPawn)
 		{
 			var count = list.Count;
 			for (var i = 0; i < count; i++)
 			{
 				var thing = list[i];
-				if (!WorkGiver_DoBill.processedThings.Contains(thing)
-					&& ReachabilityWithinRegion.ThingFromRegionListerReachable(thing, r, PathEndMode.ClosestTouch, pawn) && !(billGiverIsPawn && thing.def.IsMedicine) && baseValidator(thing))
+				if (WorkGiver_DoBill.processedThings.Contains(thing)
+					|| !ReachabilityWithinRegion.ThingFromRegionListerReachable(thing, r, PathEndMode.ClosestTouch,
+						pawn)
+					|| (billGiverIsPawn && thing.def.IsMedicine)
+					|| !baseValidator(thing))
 				{
-					WorkGiver_DoBill.newRelevantThings.Add(thing);
-					WorkGiver_DoBill.processedThings.Add(thing);
+					continue;
 				}
+
+				WorkGiver_DoBill.newRelevantThings.Add(thing);
+				WorkGiver_DoBill.processedThings.Add(thing);
 			}
 		}
 
@@ -170,13 +198,14 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 				var count = defs.Count;
 				for (var j = 0; j < count; j++)
 				{
-					if (listsByDef.TryGetValue(defs[j], out var listByDef) && listByDef.Any())
+					if (!listsByDef.TryGetValue(defs[j], out var listByDef)
+						|| !listByDef.Any()
+						|| (i > 0 && !set.Add(defs[j])))
 					{
-						if (i > 0 && !set.Add(defs[j]))
-							continue;
-
-						list.AddRange(listByDef);
+						continue;
 					}
+
+					list.AddRange(listByDef);
 				}
 			}
 
@@ -190,7 +219,8 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 			var listsByDef = r.Map.listerThings.listsByDef;
 			var result = cacheList ?? new(3);
 
-			for (var i = 0; i < ingredients.Count; i++) // generally not larger than 3 in vanilla and anything that tries to be
+			for (var i = 0; i < ingredients.Count;
+				i++) // generally not larger than 3 in vanilla and anything that tries to be
 			{
 				if (result.TryGetValue(ingredients[i], out var ingredientList))
 				{
@@ -203,15 +233,14 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 				}
 
 				var filter = ingredients[i].filter;
-				var allowedDefCount = filter.allowedDefs.Count;
 
-				if (allowedDefCount < 1)
-					continue;
-
-				if (allowedDefCount == 1)
+				switch (filter.allowedDefs.Count)
 				{
-					ingredientList.Defs.Add(filter.allowedDefs.First());
-					continue;
+					case < 1:
+						continue;
+					case 1:
+						ingredientList.Defs.Add(filter.allowedDefs.First());
+						continue;
 				}
 
 				var smallestFilter = bill.ingredientFilter;
@@ -220,19 +249,25 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 
 				OrderFiltersBySize(ref smallestFilter, ref mediumFilter, ref largestFilter);
 
-				var cachedSmallestList = AllowedDefsListCache.GetValue(smallestFilter).defs;
+				var cachedSmallestList = AllowedDefsListCache
+					.GetAndCheck<ThingFilterPatches.AllowedDefsListCacheValue>(smallestFilter).Defs;
+				
 				if (cachedSmallestList.Count != smallestFilter.allowedDefs.Count)
 				{
-					// Log.Warning($"Cached list count: {cachedSmallestList.Count}, actual filter list count: {smallestFilter.allowedDefs.Count}. Forcing a refresh now to fix.");
+					// Log.Warning($"Cached list count: {cachedSmallestList.Count}, actual filter list count: {
+					// 	smallestFilter.allowedDefs.Count}. Forcing a refresh now to fix.");
 					ThingFilterPatches.ForceSynchronizeCache(smallestFilter);
-					// Log.Warning($"New cached list count: {cachedSmallestList.Count}, actual filter list count: {smallestFilter.allowedDefs.Count}.");
+					// Log.Warning($"New cached list count: {cachedSmallestList.Count}, actual filter list count: {
+					// 	smallestFilter.allowedDefs.Count}.");
 					// didn't trigger in 1.3, but now does. Fuck
 				}
+
 				var smallestListCount = cachedSmallestList.Count;
 				for (var k = 0; k < smallestListCount; k++)
 				{
 					var def = cachedSmallestList[k];
-					if (listsByDef.TryGetValue(def, out var listByDef) && listByDef.Any()
+					if (listsByDef.TryGetValue(def, out var listByDef)
+						&& listByDef.Any()
 						&& mediumFilter.Allows(def)
 						&& largestFilter.Allows(def))
 					{
@@ -244,7 +279,8 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 			return result;
 		}
 
-		private static void OrderFiltersBySize(ref ThingFilter smallestFilter, ref ThingFilter mediumFilter, ref ThingFilter largestFilter)
+		private static void OrderFiltersBySize(ref ThingFilter smallestFilter, ref ThingFilter mediumFilter,
+			ref ThingFilter largestFilter)
 		{
 			if (smallestFilter.allowedDefs.Count > mediumFilter.allowedDefs.Count)
 				(smallestFilter, mediumFilter) = (mediumFilter, smallestFilter);
@@ -261,9 +297,10 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 	}
 
 	private static Type DelegateInstanceType { get; }
-		= AccessTools.FirstInner(typeof(WorkGiver_DoBill), t
-			=> AccessTools.FirstMethod(t, m
-				=> m.Name.Contains($"<{nameof(WorkGiver_DoBill.TryFindBestIngredientsHelper)}>")) != null
+		= AccessTools.FirstInner(typeof(WorkGiver_DoBill), static t
+			=> AccessTools.FirstMethod(t, static m
+				=> m.Name.Contains($"<{nameof(WorkGiver_DoBill.TryFindBestIngredientsHelper)}>"))
+			!= null
 			&& AccessTools.Field(t, "pawn") != null
 			&& AccessTools.Field(t, "baseValidator") != null
 			&& AccessTools.Field(t, "billGiverIsPawn") != null
@@ -272,25 +309,30 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 			&& AccessTools.Field(t, "foundAllIngredientsAndChoose") != null
 			&& AccessTools.Field(t, "foundAll") != null
 			&& AccessTools.Field(t, "thingValidator") != null)
-		?? throw new("Performance Fish failed to find the target type for its WorkGiver_DoBill patch. This means that specific patch won't apply.");
+		?? throw new("Performance Fish failed to find the target type for its WorkGiver_DoBill patch. "
+			+ "This means that specific patch won't apply.");
 
 	private static Type ThingValidatorInstanceType { get; }
-		= AccessTools.FirstInner(typeof(WorkGiver_DoBill), t
-			=> AccessTools.FirstMethod(t, m
-				=> m.Name.Contains($"<{nameof(WorkGiver_DoBill.TryFindBestBillIngredients)}>")) != null
-			&& AccessTools.Field(t, "bill") != null
+		= AccessTools.FirstInner(typeof(WorkGiver_DoBill), static t
+				=> AccessTools.FirstMethod(t, static m
+					=> m.Name.Contains($"<{nameof(WorkGiver_DoBill.TryFindBestBillIngredients)}>"))
+				!= null
+				&& AccessTools.Field(t, "bill") != null
 			//&& AccessTools.Field(t, "chosen") != null
 			//&& AccessTools.Field(t, "billGiver") != null
 			/*&& AccessTools.Field(t, "pawn") != null*/)
-		?? throw new("Performance Fish failed to find the thingValidator type for its WorkGiver_DoBill patch. This likely flat out breaks the entire patch.");
+		?? throw new("Performance Fish failed to find the thingValidator type for its WorkGiver_DoBill patch. "
+			+ "This likely flat out breaks the entire patch.");
 
-	[SuppressMessage("Style", "IDE1006:Naming Styles")]
+	// ReSharper disable once InconsistentNaming
 	private static DelegateInstance _delegateInstance { get; }
-		= (DelegateInstance)Activator.CreateInstance(typeof(DelegateInstanceImplementation<>).MakeGenericType(DelegateInstanceType));
+		= (DelegateInstance)Activator.CreateInstance(
+			typeof(DelegateInstanceImplementation<>).MakeGenericType(DelegateInstanceType));
 
-	[SuppressMessage("Style", "IDE1006:Naming Styles")]
+	// ReSharper disable once InconsistentNaming
 	private static ThingValidatorInstance _thingValidatorInstance { get; }
-		= (ThingValidatorInstance)Activator.CreateInstance(typeof(ThingValidatorInstanceImplementation<>).MakeGenericType(ThingValidatorInstanceType));
+		= (ThingValidatorInstance)Activator.CreateInstance(
+			typeof(ThingValidatorInstanceImplementation<>).MakeGenericType(ThingValidatorInstanceType));
 
 	private abstract class DelegateInstance
 	{
@@ -318,23 +360,75 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 			return this;
 		}
 
-		public override Pawn Pawn { get => _pawn(_instance); set => _pawn(_instance) = value; }
-		public override Predicate<Thing> BaseValidator { get => _baseValidator(_instance); set => _baseValidator(_instance) = value; }
-		public override bool BillGiverIsPawn { get => _billGiverIsPawn(_instance); set => _billGiverIsPawn(_instance) = value; }
-		public override int RegionsProcessed { get => _regionsProcessed(_instance); set => _regionsProcessed(_instance) = value; }
-		public override int AdjacentRegionsAvailable { get => _adjacentRegionsAvailable(_instance); set => _adjacentRegionsAvailable(_instance) = value; }
-		public override Predicate<List<Thing>> FoundAllIngredientsAndChoose { get => _foundAllIngredientsAndChoose(_instance); set => _foundAllIngredientsAndChoose(_instance) = value; }
-		public override bool FoundAll { get => _foundAll(_instance); set => _foundAll(_instance) = value; }
-		public override Predicate<Thing> ThingValidator { get => _thingValidator(_instance); set => _thingValidator(_instance) = value; }
+		public override Pawn Pawn
+		{
+			get => _pawn(_instance);
+			set => _pawn(_instance) = value;
+		}
+
+		public override Predicate<Thing> BaseValidator
+		{
+			get => _baseValidator(_instance);
+			set => _baseValidator(_instance) = value;
+		}
+
+		public override bool BillGiverIsPawn
+		{
+			get => _billGiverIsPawn(_instance);
+			set => _billGiverIsPawn(_instance) = value;
+		}
+
+		public override int RegionsProcessed
+		{
+			get => _regionsProcessed(_instance);
+			set => _regionsProcessed(_instance) = value;
+		}
+
+		public override int AdjacentRegionsAvailable
+		{
+			get => _adjacentRegionsAvailable(_instance);
+			set => _adjacentRegionsAvailable(_instance) = value;
+		}
+
+		public override Predicate<List<Thing>> FoundAllIngredientsAndChoose
+		{
+			get => _foundAllIngredientsAndChoose(_instance);
+			set => _foundAllIngredientsAndChoose(_instance) = value;
+		}
+
+		public override bool FoundAll
+		{
+			get => _foundAll(_instance);
+			set => _foundAll(_instance) = value;
+		}
+
+		public override Predicate<Thing> ThingValidator
+		{
+			get => _thingValidator(_instance);
+			set => _thingValidator(_instance) = value;
+		}
 
 		private static AccessTools.FieldRef<T, Pawn> _pawn = AccessTools.FieldRefAccess<T, Pawn>("pawn");
-		private static AccessTools.FieldRef<T, Predicate<Thing>> _baseValidator = AccessTools.FieldRefAccess<T, Predicate<Thing>>("baseValidator");
-		private static AccessTools.FieldRef<T, bool> _billGiverIsPawn = AccessTools.FieldRefAccess<T, bool>("billGiverIsPawn");
-		private static AccessTools.FieldRef<T, int> _regionsProcessed = AccessTools.FieldRefAccess<T, int>("regionsProcessed");
-		private static AccessTools.FieldRef<T, int> _adjacentRegionsAvailable = AccessTools.FieldRefAccess<T, int>("adjacentRegionsAvailable");
-		private static AccessTools.FieldRef<T, Predicate<List<Thing>>> _foundAllIngredientsAndChoose = AccessTools.FieldRefAccess<T, Predicate<List<Thing>>>("foundAllIngredientsAndChoose");
+
+		private static AccessTools.FieldRef<T, Predicate<Thing>> _baseValidator
+			= AccessTools.FieldRefAccess<T, Predicate<Thing>>("baseValidator");
+
+		private static AccessTools.FieldRef<T, bool> _billGiverIsPawn
+			= AccessTools.FieldRefAccess<T, bool>("billGiverIsPawn");
+
+		private static AccessTools.FieldRef<T, int> _regionsProcessed
+			= AccessTools.FieldRefAccess<T, int>("regionsProcessed");
+
+		private static AccessTools.FieldRef<T, int> _adjacentRegionsAvailable
+			= AccessTools.FieldRefAccess<T, int>("adjacentRegionsAvailable");
+
+		private static AccessTools.FieldRef<T, Predicate<List<Thing>>> _foundAllIngredientsAndChoose
+			= AccessTools.FieldRefAccess<T, Predicate<List<Thing>>>("foundAllIngredientsAndChoose");
+
 		private static AccessTools.FieldRef<T, bool> _foundAll = AccessTools.FieldRefAccess<T, bool>("foundAll");
-		private static AccessTools.FieldRef<T, Predicate<Thing>> _thingValidator = AccessTools.FieldRefAccess<T, Predicate<Thing>>("thingValidator");
+
+		private static AccessTools.FieldRef<T, Predicate<Thing>> _thingValidator
+			= AccessTools.FieldRefAccess<T, Predicate<Thing>>("thingValidator");
 	}
 
 	private abstract class ThingValidatorInstance
@@ -364,7 +458,11 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 			}
 		}
 
-		public override Bill Bill { get => _bill(_instance); set => _bill(_instance) = value; }
+		public override Bill Bill
+		{
+			get => _bill(_instance);
+			set => _bill(_instance) = value;
+		}
 		//public override Thing BillGiver { get => _billGiver(_instance); set => _billGiver(_instance) = value; }
 
 		private static AccessTools.FieldRef<T, Bill> _bill = AccessTools.FieldRefAccess<T, Bill>("bill");
@@ -373,9 +471,20 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 
 	public class TryFindBestIngredientsHelper_Patch : FishPatch
 	{
-		public override string Description => "Part of the DoBill optimization";
+		public override string Description { get; } = "Part of the DoBill optimization";
 
-		public override Delegate TargetMethodGroup => WorkGiver_DoBill.TryFindBestIngredientsHelper;
+		public override bool Enabled
+		{
+			set
+			{
+				if (base.Enabled == value)
+					return;
+
+				Get<TryFindBestIngredientsInSet_NoMixHelper_Patch>().Enabled = base.Enabled = value;
+			}
+		}
+
+		public override Delegate TargetMethodGroup { get; } = WorkGiver_DoBill.TryFindBestIngredientsHelper;
 
 		public static void Postfix(Predicate<Thing> thingValidator)
 		{
@@ -399,24 +508,43 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 
 	public class TryFindBestIngredientsInSet_NoMixHelper_Patch : FishPatch
 	{
-		public override string Description => "Part of the DoBill optimization";
+		public override string Description { get; }
+			= "Part of the DoBill optimization. Bills that need multiple ingredients, like for example steel and "
+			+ "components for guns, normally scan their surroundings for all those ingredients and count them, until "
+			+ "enough of both is found. This patch removes ingredients from the lookup when enough of them is found, "
+			+ "allowing the patched method to skip counting them and go straight to the other missing ingredient. In "
+			+ "case of steel and components that could mean not having to go over 100s of steel stacks at times. "
+			+ "Prevents large spikes from these situations, does nothing for all other bills.";
 
-		public override Delegate TargetMethodGroup => WorkGiver_DoBill.TryFindBestIngredientsInSet_NoMixHelper;
+		public override bool Enabled
+		{
+			set
+			{
+				if (base.Enabled == value)
+					return;
+
+				Get<TryFindBestIngredientsHelper_Patch>().Enabled = base.Enabled = value;
+			}
+		}
+
+		public override Delegate TargetMethodGroup { get; } = WorkGiver_DoBill.TryFindBestIngredientsInSet_NoMixHelper;
 
 		public static void Prefix(ref bool alreadySorted, Bill? bill)
 			=> alreadySorted = alreadySorted
-			|| (bill?.billStack is { } stack
+				|| (bill?.billStack is { } stack
 #if V1_4
-			&& stack.billGiver is not Building_MechGestator
+					// ReSharper disable once MergeIntoPattern
+					&& stack.billGiver is not Building_MechGestator
 #endif
-			);
+				);
 
-		public static CodeInstructions? Transpiler(CodeInstructions codes, MethodBase method)
+		public static CodeInstructions Transpiler(CodeInstructions instructions, MethodBase method,
+			ILGenerator generator)
 		{
 			var i_variable = FishTranspiler.FirstLocalVariable(method, typeof(int));
+			var new_i_label = generator.DefineLabel();
 
-			return codes.ReplaceAt(
-				(codes, i)
+			return instructions.ReplaceAt((codes, i)
 					=> i + 3 < codes.Count
 					&& codes[i] == i_variable.Load()
 					&& codes[i + 1] == FishTranspiler.Constant(1) // i++;
@@ -425,22 +553,33 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 				code
 					=> new[]
 					{
+						new(OpCodes.Br_S, new_i_label), // else
 						FishTranspiler.FirstLocalVariable(method, typeof(IngredientCount))
 							.WithLabels(code.ExtractLabels()),
 						FishTranspiler.FirstArgument(method, typeof(Bill)),
 						FishTranspiler.Call(MarkIngredientCountAsFound),
-						code
-					}
-				);
+						code.WithLabels(new_i_label)
+					});
+
+			// if (!flag)
+			// {
+			// 	if (missingIngredients == null)
+			// 		return false;
+			// 	missingIngredients.Add(ingredientCount);
+			// }
+			// else
+			// {
+			//  	MarkIngredientCountAsFound(ingredientCount, bill);	
+			// }
 		}
 
-		public static void MarkIngredientCountAsFound(IngredientCount ingredientCount, Bill bill)
+		public static void MarkIngredientCountAsFound(IngredientCount ingredientCount, Bill? bill)
 		{
 			if (bill?.billStack is not { } billStack
 #if V1_4
 				|| billStack.billGiver is Building_MechGestator
 #endif
-				)
+			)
 			{
 				return;
 			}
@@ -451,7 +590,7 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 
 			ref var cacheItem = ref cache._items[cache.IndexOfKey(ingredientCount)];
 
-			if ((cache.Count == 1 && cacheItem.Value.Defs.Count == 1)
+			if ((cache.Count == 1 /*&& cacheItem.Value.Defs.Count == 1*/)
 				|| bill.recipe?.workerCounterClass != typeof(RecipeWorkerCounter))
 			{
 				return;
@@ -465,25 +604,24 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 	{
 		public IntVec3 rootCell;
 
-		public int Compare(Thing x, Thing y) => (x.Position - rootCell).LengthHorizontalSquared.CompareTo((y.Position - rootCell).LengthHorizontalSquared);
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public int Compare(Thing x, Thing y)
+			=> (x.Position - rootCell).LengthHorizontalSquared.CompareTo(
+				(y.Position - rootCell).LengthHorizontalSquared);
 	}
 
-	public struct RecipeIngredientCacheValue
+	public record struct RecipeIngredientCacheValue
 	{
-		public IngredientCacheList thingDefs;
-
+		public IngredientCacheList? thingDefs;
 		private int _nextRefreshTick;
 
-		public RecipeIngredientCacheValue(IngredientCacheList thingDefs)
-		{
-			this.thingDefs = thingDefs;
-			_nextRefreshTick = Current.Game.tickManager.TicksGame + 384 + Math.Abs(Rand.Int % 256);
-		}
+		public void Update(Bill bill)
+			=> _nextRefreshTick = TickHelper.Add(GenTicks.TickRareInterval * 2, bill.loadID);
 
-		public bool ShouldRefreshNow
+		public bool Dirty
 		{
-			get => _nextRefreshTick < Current.Game.tickManager.TicksGame;
-			set => _nextRefreshTick = value ? 0 : Current.Game.tickManager.TicksGame + 384 + Math.Abs(Rand.Int % 256);
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			get => TickHelper.Past(_nextRefreshTick);
 		}
 	}
 }

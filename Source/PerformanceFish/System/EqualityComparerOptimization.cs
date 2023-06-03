@@ -1,41 +1,76 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-namespace PerformanceFish.System;
-public class EqualityComparerOptimization : ClassWithFishPatches, IHasDescription
-{
-	public string Description => "Specialized EqualityComparers for slightly faster collection lookups on ValueTypes. No settings for this one. Can reduce memory usage by preventing unnecessary boxing into object.";
+using System.Collections.Concurrent;
+using System.Linq;
+using System.Threading.Tasks;
 
-	public static void Initialize()
+namespace PerformanceFish.System;
+
+public class EqualityComparerOptimization : ClassWithFishPatches
+{
+	public class Optimization : FishPatch
 	{
-		foreach (var type in AccessTools.AllTypes())
+		public override string? Description { get; }
+			= "Specialized EqualityComparers for slightly faster collection lookups on ValueTypes. Can reduce memory "
+			+ "usage by preventing unnecessary boxing into object and helps with performance of a few UI methods. "
+			+ "Changes require a restart.";
+		
+		public override MethodInfo? TryPatch() => null;
+		
+		public static void Initialize()
 		{
-			if (type.IsValueType
-				&& type != typeof(void)
-				&& typeof(IEquatable<>).MakeGenericType(type).IsAssignableFrom(type)
-				&& type != typeof(int)
-				&& type != typeof(ushort)
-				&& !type.IsGenericTypeDefinition)
+			if (!Get<Optimization>().Enabled)
+				return;
+
+			var types = AccessTools.AllTypes().ToList();
+			
+			Parallel.ForEach(Partitioner.Create(0, types.Count), (range, _) =>
 			{
-				SetValueForDefaultComparer(type, Activator.CreateInstance(typeof(EquatableValueTypeEqualityComparer<>).MakeGenericType(type)));
-			}
+				for (var i = range.Item1; i < range.Item2; i++)
+				{
+					var type = types[i];
+					object? equalityComparer
+						= type == typeof(int) ? new IntEqualityComparer()
+						: type == typeof(ushort) ? new UshortEqualityComparer()
+						: type == typeof(string) ? new StringEqualityComparer()
+						: null;
+			
+					if (equalityComparer != null)
+					{
+						SetValueForDefaultComparer(type, equalityComparer);
+						return;
+					}
+				
+					if (!type.IsValueType
+						|| type == typeof(void)
+						|| type.IsGenericTypeDefinition
+						|| type.IsEnum
+						|| type == typeof(byte))
+					{
+						return;
+					}
+
+					SetValueForDefaultComparer(type,
+						Activator.CreateInstance(
+							type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>)
+								? (type.GetGenericArguments()[0] is var genericArgument
+									&& genericArgument.IsAssignableTo(typeof(IEquatable<>), type)
+										? typeof(EquatableNullableEqualityComparer<>)
+										: typeof(NullableEqualityComparer<>)).MakeGenericType(genericArgument)
+								: (type.IsAssignableTo(typeof(IEquatable<>), type)
+									? typeof(EquatableValueTypeEqualityComparer<>)
+									: typeof(ValueTypeEqualityComparer<>)).MakeGenericType(type)));
+				}
+			});
 		}
 
-		SetValueForDefaultComparer(typeof(int), new IntEqualityComparer());
-		SetValueForDefaultComparer(typeof(ushort), new UshortEqualityComparer());
-		SetValueForDefaultComparer(typeof(string), new StringEqualityComparer());
-
-		// below aren't IEquatable, so why don't we just go fix that
-		SetValueForDefaultComparer(typeof(IntPtr), new IntPtrEqualityComparer());
-		SetValueForDefaultComparer(typeof(RuntimeFieldHandle), new RuntimeFieldHandleEqualityComparer());
-		SetValueForDefaultComparer(typeof(RuntimeTypeHandle), new RuntimeTypeHandleEqualityComparer());
-		SetValueForDefaultComparer(typeof(RuntimeMethodHandle), new RuntimeMethodHandleEqualityComparer());
+		private static void SetValueForDefaultComparer(Type type, object value)
+			=> typeof(EqualityComparer<>).MakeGenericType(type).GetField("defaultComparer", AccessTools.allDeclared)!
+				.SetValue(null, value);
 	}
-
-	private static void SetValueForDefaultComparer(Type type, object value)
-		=> typeof(EqualityComparer<>).MakeGenericType(type).GetField("defaultComparer", AccessTools.allDeclared).SetValue(null, value);
 }
 
 [Serializable]
@@ -43,13 +78,55 @@ public class EquatableValueTypeEqualityComparer<T> : EqualityComparer<T> where T
 {
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override bool Equals(T x, T y) => x.Equals(y);
+
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode(T obj) => obj.GetHashCode();
+	public override int GetHashCode(T obj) => HashCode.Get(obj);
 
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
 	public override bool Equals(object obj) => obj is EquatableValueTypeEqualityComparer<T>;
+
+	public override int GetHashCode() => GetType().Name.GetHashCode();
+}
+
+[Serializable]
+public class EquatableNullableEqualityComparer<T> : EqualityComparer<T?> where T : struct, IEquatable<T>
+{
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public override bool Equals(T? x, T? y)
+		=> x.HasValue
+			? y.HasValue && x.Value.Equals(y.Value)
+			: !y.HasValue;
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public override int GetHashCode(T? obj) => !obj.HasValue ? 0 : HashCode.Get(obj);
+
+	/// <summary>
+	/// Equals method for the comparer itself.
+	/// </summary>
+	public override bool Equals(object obj) => obj is EquatableNullableEqualityComparer<T>;
+
+	public override int GetHashCode() => GetType().Name.GetHashCode();
+}
+
+[Serializable]
+public class NullableEqualityComparer<T> : EqualityComparer<T?> where T : struct
+{
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public override bool Equals(T? x, T? y)
+		=> x.HasValue
+			? y.HasValue && x.Value.Equals<T>(y.Value)
+			: !y.HasValue;
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public override int GetHashCode(T? obj) => !obj.HasValue ? 0 : HashCode.Get(obj);
+
+	/// <summary>
+	/// Equals method for the comparer itself.
+	/// </summary>
+	public override bool Equals(object obj) => obj is NullableEqualityComparer<T>;
+
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
 
@@ -57,7 +134,9 @@ public class EquatableValueTypeEqualityComparer<T> : EqualityComparer<T> where T
 public class StringEqualityComparer : EqualityComparer<string>
 {
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override bool Equals(string x, string y) => string.Equals(x, y); // already does a nullcheck, so this skips the extra check that'd otherwise happen
+	public override bool Equals(string x, string y)
+		=> string.Equals(x, y); // already does a null check, so this skips the extra check that'd otherwise happen
+
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override int GetHashCode(string obj) => obj.GetHashCode();
 
@@ -65,66 +144,7 @@ public class StringEqualityComparer : EqualityComparer<string>
 	/// Equals method for the comparer itself.
 	/// </summary>
 	public override bool Equals(object obj) => obj is StringEqualityComparer;
-	public override int GetHashCode() => GetType().Name.GetHashCode();
-}
 
-[Serializable]
-public class IntPtrEqualityComparer : EqualityComparer<IntPtr>
-{
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override bool Equals(IntPtr x, IntPtr y) => x == y;
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode(IntPtr obj) => obj.GetHashCode();
-
-	/// <summary>
-	/// Equals method for the comparer itself.
-	/// </summary>
-	public override bool Equals(object obj) => obj is IntPtrEqualityComparer;
-	public override int GetHashCode() => GetType().Name.GetHashCode();
-}
-
-[Serializable]
-public class RuntimeFieldHandleEqualityComparer : EqualityComparer<RuntimeFieldHandle>
-{
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override bool Equals(RuntimeFieldHandle x, RuntimeFieldHandle y) => x.Value == y.Value;
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode(RuntimeFieldHandle obj) => obj.GetHashCode();
-
-	/// <summary>
-	/// Equals method for the comparer itself.
-	/// </summary>
-	public override bool Equals(object obj) => obj is RuntimeFieldHandleEqualityComparer;
-	public override int GetHashCode() => GetType().Name.GetHashCode();
-}
-
-[Serializable]
-public class RuntimeTypeHandleEqualityComparer : EqualityComparer<RuntimeTypeHandle>
-{
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override bool Equals(RuntimeTypeHandle x, RuntimeTypeHandle y) => x.Value == y.Value;
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode(RuntimeTypeHandle obj) => obj.GetHashCode();
-
-	/// <summary>
-	/// Equals method for the comparer itself.
-	/// </summary>
-	public override bool Equals(object obj) => obj is RuntimeTypeHandleEqualityComparer;
-	public override int GetHashCode() => GetType().Name.GetHashCode();
-}
-
-[Serializable]
-public class RuntimeMethodHandleEqualityComparer : EqualityComparer<RuntimeMethodHandle>
-{
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override bool Equals(RuntimeMethodHandle x, RuntimeMethodHandle y) => x.Value == y.Value;
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode(RuntimeMethodHandle obj) => obj.GetHashCode();
-
-	/// <summary>
-	/// Equals method for the comparer itself.
-	/// </summary>
-	public override bool Equals(object obj) => obj is RuntimeMethodHandleEqualityComparer;
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
 
@@ -133,6 +153,7 @@ public class IntEqualityComparer : EqualityComparer<int>
 {
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override bool Equals(int x, int y) => x == y;
+
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override int GetHashCode(int obj) => obj;
 
@@ -140,6 +161,7 @@ public class IntEqualityComparer : EqualityComparer<int>
 	/// Equals method for the comparer itself.
 	/// </summary>
 	public override bool Equals(object obj) => obj is IntEqualityComparer;
+
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
 
@@ -148,6 +170,7 @@ public class UshortEqualityComparer : EqualityComparer<ushort>
 {
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override bool Equals(ushort x, ushort y) => x == y;
+
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override int GetHashCode(ushort obj) => obj;
 
@@ -155,16 +178,18 @@ public class UshortEqualityComparer : EqualityComparer<ushort>
 	/// Equals method for the comparer itself.
 	/// </summary>
 	public override bool Equals(object obj) => obj is UshortEqualityComparer;
+
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
 
 [Serializable]
 public class ReferenceEqualityComparer<T> : EqualityComparer<T>
 {
-	public static new readonly ReferenceEqualityComparer<T> Default = new();
+	public new static readonly ReferenceEqualityComparer<T> Default = new();
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override bool Equals(T x, T y) => ReferenceEquals(x, y);
+
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj);
 
@@ -172,5 +197,25 @@ public class ReferenceEqualityComparer<T> : EqualityComparer<T>
 	/// Equals method for the comparer itself.
 	/// </summary>
 	public override bool Equals(object obj) => obj is ReferenceEqualityComparer<T>;
+
+	public override int GetHashCode() => GetType().Name.GetHashCode();
+}
+
+[Serializable]
+public class ValueTypeEqualityComparer<T> : EqualityComparer<T> where T : struct
+{
+	public new static readonly ValueTypeEqualityComparer<T> Default = new();
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public override bool Equals(T x, T y) => x.Equals<T>(y);
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public override int GetHashCode(T obj) => HashCode.Get(obj);
+
+	/// <summary>
+	/// Equals method for the comparer itself.
+	/// </summary>
+	public override bool Equals(object obj) => obj is ReferenceEqualityComparer<T>;
+
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }

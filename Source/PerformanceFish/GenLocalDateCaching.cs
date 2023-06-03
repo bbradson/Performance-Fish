@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -6,18 +6,23 @@
 using System.Linq;
 using System.Reflection.Emit;
 
+// ReSharper disable PossibleMultipleEnumeration
+
 namespace PerformanceFish;
 
 public class GenLocalDateCaching : ClassWithFishPatches
 {
 	public class DayTickByThing_Patch : FishPatch
 	{
-		public override string? Description => "Caches results of GenLocalDate.DayTick for the first map. This is similar to Rim73's mind state optimization, but yields accurate results instead of a placeholder value to avoid issues.";
-		public override Delegate? TargetMethodGroup => (Func<Thing, int>)GenLocalDate.DayTick;
+		public override string Description { get; }
+			= "Caches results of GenLocalDate.DayTick for the first map. This is similar to Rim73's mind state "
+				+ "optimization, but yields accurate results instead of a placeholder value to avoid issues.";
+
+		public override Delegate TargetMethodGroup { get; } = (Func<Thing, int>)GenLocalDate.DayTick;
 		public override int TranspilerMethodPriority => Priority.First;
 
 		public static CodeInstructions Transpiler(CodeInstructions codes, MethodBase method, ILGenerator generator)
-		//=> Reflection.GetCodeInstructions(Replacement);
+			//=> Reflection.GetCodeInstructions(Replacement);
 		{
 			var labelToStartOfMethod = generator.DefineLabel();
 			codes.First().labels.Add(labelToStartOfMethod);
@@ -37,7 +42,6 @@ public class GenLocalDateCaching : ClassWithFishPatches
 
 			foreach (var code in codes)
 				yield return code;
-
 		}
 
 		//[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -58,21 +62,24 @@ public class GenLocalDateCaching : ClassWithFishPatches
 
 	public class DayTickByMap_Patch : FishPatch
 	{
-		public override string? Description => "Caches results of GenLocalDate.DayTick for the first map. This is similar to Rim73's mind state optimization, but yields accurate results instead of a placeholder value to avoid issues.";
-		public override Delegate? TargetMethodGroup => (Func<Map, int>)GenLocalDate.DayTick;
+		public override string Description { get; }
+			= "Caches results of GenLocalDate.DayTick for the first map. This is similar to Rim73's mind state "
+				+ "optimization, but yields accurate results instead of a placeholder value to avoid issues.";
+
+		public override Delegate TargetMethodGroup { get; } = (Func<Map, int>)GenLocalDate.DayTick;
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool Prefix(Map map, ref int __result, out bool __state)
 		{
 			if (map != SavedMap)
 			{
-				if (SavedMap is null && Find.Maps?.Count > 0 && Find.Maps[0] == map)
+				if (SavedMap is null && Find.Maps is { Count: > 0 } maps && maps[0] == map)
 					SavedMap = map;
 
 				return __state = true;
 			}
 
-			if (SavedTick != GenTicks.TicksGame)
+			if (SavedTick != TickHelper.TicksGame)
 				return __state = true;
 
 			__result = DayTick;
@@ -85,7 +92,7 @@ public class GenLocalDateCaching : ClassWithFishPatches
 			if (!__state || SavedMap != map)
 				return;
 
-			SavedTick = GenTicks.TicksGame;
+			SavedTick = TickHelper.TicksGame;
 			DayTick = __result;
 		}
 	}

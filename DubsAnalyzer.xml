@@ -118,7 +118,17 @@
 		</NestedTypes-->
 	</PerformanceFish>
 
-	<ThingComps>
+	<ThingCompTick>
+		<Tooltip>Tick methods of comps attached to Things. Any ThingWithComps can have these, and any mod can add new ones</Tooltip>
+		<Category>Tick</Category>
+		<DerivedMethods>
+			<li>Verse.ThingComp:CompTick</li>
+			<li>Verse.ThingComp:CompTickRare</li>
+			<li>Verse.ThingComp:CompTickLong</li>
+		</DerivedMethods>
+	</ThingCompTick>
+
+	<ThingCompUpdate>
 		<Tooltip>Update methods of comps attached to Things. Any ThingWithComps can have these, and any mod can add new ones</Tooltip>
 		<Category>Update</Category>
 		<DerivedMethods>
@@ -127,8 +137,8 @@
 			<li>Verse.ThingComp:PostDrawExtraSelectionOverlays</li>
 			<li>Verse.ThingComp:PostPrintOnto</li>
 		</DerivedMethods>
-	</ThingComps>
-	
+	</ThingCompUpdate>
+
 	<Hediffs>
 		<Tooltip>Ticking health stuff ond other things implanted in pawn bodies</Tooltip>
 		<Category>Tick</Category>
@@ -138,6 +148,31 @@
 		</DerivedMethods>
 	</Hediffs>
 
+	<Abilities>
+		<Tooltip>Ticking methods of abilities. Cooldown, effects, combat</Tooltip>
+		<Category>Tick</Category>
+		<DerivedMethods>
+			<li>RimWorld.Ability:AbilityTick</li>
+			<li MayRequire="OskarPotocki.VanillaFactionsExpanded.Core">VFECore.Abilities.Ability:Tick</li>
+		</DerivedMethods>
+	</Abilities>
+
+	<Precepts>
+		<Tooltip>Ticking methods of precepts. Ideology stuff.</Tooltip>
+		<Category>Tick</Category>
+		<DerivedMethods>
+			<li MayRequire="Ludeon.RimWorld.Ideology">RimWorld.Precept:Tick</li>
+		</DerivedMethods>
+	</Precepts>
+
+	<Genes>
+		<Tooltip>Ticking methods of genes. Yes, all the genes tick.</Tooltip>
+		<Category>Tick</Category>
+		<DerivedMethods>
+			<li MayRequire="Ludeon.RimWorld.Biotech">Verse.Gene:Tick</li>
+		</DerivedMethods>
+	</Genes>
+
 	<HediffComps>
 		<Tooltip>Comps attached to Hediffs. Often responsible for the actual logic</Tooltip>
 		<Category>Tick</Category>
@@ -145,6 +180,14 @@
 			<li>Verse.HediffComp:CompPostTick</li>
 		</DerivedMethods>
 	</HediffComps>
+
+	<AbilityComps>
+		<Tooltip>Comps attached to abilities</Tooltip>
+		<Category>Tick</Category>
+		<DerivedMethods>
+			<li>RimWorld.AbilityComp:CompTick</li>
+		</DerivedMethods>
+	</AbilityComps>
 
 	<WorldObjects>
 		<Tooltip>Settlements, caravans etc</Tooltip>

@@ -1,7 +1,9 @@
-﻿// Copyright (c) 2022 bradson
+﻿// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+// #define DEBUG
 
 global using System;
 global using System.Collections;
@@ -11,117 +13,164 @@ global using System.Reflection;
 global using System.Runtime.CompilerServices;
 global using System.Threading;
 global using FisheryLib;
+global using FisheryLib.Cecil;
+global using FisheryLib.Collections;
 global using FisheryLib.Utility.Diagnostics;
 global using HarmonyLib;
 global using PerformanceFish.Utility;
+global using PerformanceFish.Patching;
 global using RimWorld;
 global using UnityEngine;
 global using Verse;
 global using static FisheryLib.Aliases;
 global using CodeInstructions = System.Collections.Generic.IEnumerable<HarmonyLib.CodeInstruction>;
+using System.Diagnostics;
 using System.Linq;
 using System.Security;
-using PerformanceFish.System;
+using System.Threading.Tasks;
+using JetBrains.Annotations;
+using PerformanceFish.ModCompatibility;
+using PerformanceFish.Prepatching;
 
 [assembly: AllowPartiallyTrustedCallers]
-[assembly: SecurityTransparent]
 [assembly: SecurityRules(SecurityRuleSet.Level2, SkipVerificationInFullTrust = true)]
+[assembly: Debuggable(false, false)]
+
+[module: SkipLocalsInit]
 
 namespace PerformanceFish;
 
+[PublicAPI]
 public class PerformanceFishMod : Mod
 {
 	public const string NAME = "Performance Fish";
-	public const decimal VERSION = 0.3M;
+	public const string PACKAGE_ID = PackageIDs.PERFORMANCE_FISH;
+	public const decimal VERSION = 0.4M;
 
-#pragma warning disable IDE0079 // Visual Studio freaking out a bit over here
-#pragma warning disable CS8618
-	public static FishSettings Settings { get; private set; }
-	public static PerformanceFishMod Mod { get; private set; }
-	public static Harmony Harmony { get; private set; }
-	public static IHasFishPatch[] AllPatchClasses { get; private set; }
-#pragma warning restore CS8618, IDE0079
+	public static FishSettings? Settings { get; internal set; }
+	public static PerformanceFishMod? Mod { get; private set; }
+	public static Harmony Harmony { get; private set; } = new(PACKAGE_ID);
+	public static IHasFishPatch[]? AllPatchClasses { get; internal set; }
+	public static ClassWithFishPrepatches[]? AllPrepatchClasses { get; internal set; }
 
 	public PerformanceFishMod(ModContentPack content) : base(content)
 	{
+		ActiveMods.CheckRequirements();
+		InitializeMod();
+	}
+
+	private void InitializeMod()
+	{
 		DebugLog.Message($"Initializing {NAME} v{VERSION}");
 
+		// ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
 		if (Mod != null)
-			ThrowHelper.ThrowInvalidOperationException($"Initialized a second instance of the {NAME} mod. This should never happen. Cancelling now to avoid further issues.");
+		{
+			Verse.Log.TryOpenLogWindow();
+			ThrowHelper.ThrowInvalidOperationException($"Initialized a second instance of the {
+				NAME} mod. This should never happen. Cancelling now to avoid further issues.");
+		}
 
 		Mod = this;
 
-		TryInitialize(EqualityComparerOptimization.Initialize);
-
-		Harmony = new(content.PackageIdPlayerFacing);
-
-		AllPatchClasses = Assembly.GetExecutingAssembly().GetTypes()
-			.Where(t => typeof(IHasFishPatch).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract)
-			.Select(type
-				=> {
-					try
-					{
-						return SingletonFactory<IHasFishPatch>.Get(type);
-					}
-					catch (Exception ex)
-					{
-						Log.Error($"Performance Fish encountered an exception while trying to initialize {type.Name}:\n{ex}");
-						return null!;
-					}
-				})
-			.Where(p => p != null)
-			.ToArray();
-
-		ReflectionCaching.Initialize();
-
-		try
+		if (!ActiveMods.Prepatcher)
 		{
-			Settings = GetSettings<FishSettings>();
-		}
-		catch (Exception ex)
-		{
-			Log.Error($"Performance Fish encountered an expection while trying to load its settings\n{ex}");
-			WriteSettings();
+			Verse.Log.TryOpenLogWindow();
+			Log.Error("Prepatcher mod is missing. Performance Fish will not be working correctly in this state.");
 		}
 
-		TryInitialize(AnalyzerFixes.Patch);
+		modSettings = Settings;
+		modSettings!.Mod = this;
 
-		foreach (var patch in AllPatchClasses)
+		if (!OnAssembliesLoaded.Loaded)
 		{
+			Verse.Log.TryOpenLogWindow();
+			Log.Error("Performance Fish failed to initialize entirely. There are either critical dependencies "
+				+ "missing or mods with hard incompatibilities present.");
+		}
+
+#if DEBUG
+		LogPatchCount();
+#endif
+	}
+
+	public static void LogPatchCount()
+	{
+		var allFishPatches = AllPatchClasses!.SelectMany(static patchClass => patchClass.Patches.All.Values).ToList();
+		var allFishPrepatches
+			= AllPrepatchClasses!.SelectMany(static patchClass => patchClass.Patches.All.Values).ToList();
+
+		var prefixCount = SumFor(allFishPatches, static fishPatch => fishPatch.PrefixMethodInfo);
+		var postfixCount = SumFor(allFishPatches, static fishPatch => fishPatch.PostfixMethodInfo);
+		var transpilerCount = SumFor(allFishPatches, static fishPatch => fishPatch.TranspilerMethodInfo);
+		var prepatcherPrefixCount = SumFor(allFishPrepatches, static fishPrepatch
+			=> (fishPrepatch as FishPrepatch)?.PrefixMethodInfo);
+		var prepatcherPostfixCount = SumFor(
+			allFishPrepatches, static fishPrepatch => (fishPrepatch as FishPrepatch)?.PostfixMethodInfo);
+		var prepatcherTranspilerCount = SumFor(allFishPrepatches, static fishPrepatch
+			=> fishPrepatch is FishPrepatch { PrefixMethodInfo: null, PostfixMethodInfo: null }
+				? methodof(SumFor<object>) : null);
+		var prepatcherClassPatchCount = SumFor(allFishPrepatches, static fishPrepatch
+			=> fishPrepatch is FishClassPrepatch ? methodof(SumFor<object>) : null);
+		
+		Log.Message($"Performance Fish applied {prefixCount} harmony prefixes, {postfixCount} harmony postfixes, {
+			transpilerCount} harmony transpilers, {prepatcherPrefixCount} prepatcher prefixes, {
+				prepatcherPostfixCount} prepatcher postfixes, {prepatcherTranspilerCount} prepatcher transpilers and {
+					prepatcherClassPatchCount} prepatcher class patch{
+						(prepatcherClassPatchCount == 1 ? "" : "es")}. That's a total of {prefixCount + postfixCount
+							+ transpilerCount + prepatcherPrefixCount + prepatcherPostfixCount
+							+ prepatcherTranspilerCount + prepatcherClassPatchCount} patches. Amazing!\n\n"
+			+ $"The following methods were patched:\n{string.Join("\n", allFishPatches.SelectMany(static fishPatch
+					=> fishPatch.TargetMethodInfos).Concat(allFishPrepatches.Select(static fishPrepatch
+				=> (fishPrepatch as FishPrepatch)?.TargetMethodBase)).Where(static method
+				=> method != null).Select(static method => method.FullDescription()))}\n"
+			+ $"===================================================================================");
+	}
+
+	private static int SumFor<T>(List<T> allFishPatches, Func<T, MethodInfo?> methodInfoGetter)
+		=> allFishPatches.Sum(fishPatch => methodInfoGetter(fishPatch) != null ? 1 : 0);
+
+	internal static T[] InitializeAllPatchClasses<T>() where T : notnull
+	{
+		var types = Assembly.GetExecutingAssembly().GetTypes();
+		var list = new List<T>(types.Length);
+
+		Parallel.ForEach(types, type =>
+		{
+			if (!type.IsAssignableTo(typeof(T))
+				|| type.IsInterface
+				|| type.IsAbstract)
+			{
+				return;
+			}
+
 			try
 			{
-				if (!patch.RequiresLoadedGameForPatching)
-					patch.Patches.PatchAll();
+				var patchClass = SingletonFactory<T>.Get(type);
+				
+				lock (((ICollection)list).SyncRoot)
+					list.Add(patchClass);
 			}
 			catch (Exception ex)
 			{
-				Log.Error($"Performance Fish encountered an exception while trying to initialize {patch.GetType().Name}:\n{ex}");
+				Log.Error($"{NAME} encountered an exception while trying to initialize {type.Name}:\n{ex}");
 			}
-		}
-	}
-
-	private static void TryInitialize(Action action)
-	{
-		try
-		{
-			action();
-		}
-		catch (Exception ex)
-		{
-			Log.Error($"Performance Fish encountered an exception while trying to initialize {action.Method.FullDescription()}:\n{ex}");
-		}
+		});
+		
+		return list.ToArray();
 	}
 
 	public static T? Get<T>()
 	{
-		foreach (var patch in AllPatchClasses)
+		for (var i = AllPatchClasses!.Length - 1; i >= 0; i--)
 		{
-			if (patch is T patchOfT)
+			if (AllPatchClasses[i] is T patchOfT)
 				return patchOfT;
 		}
+
 		return default;
 	}
 
-	public override string SettingsCategory() => "Performance Fish";
+	public override string SettingsCategory() => Mod!.Content.Name;
 	public override void DoSettingsWindowContents(Rect inRect) => FishSettings.DoSettingsWindowContents(inRect);
 }
