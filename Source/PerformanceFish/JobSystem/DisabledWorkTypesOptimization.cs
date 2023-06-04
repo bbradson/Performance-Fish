@@ -17,8 +17,9 @@ public class DisabledWorkTypesOptimization : ClassWithFishPatches
 			= AccessTools.Method(typeof(Pawn), nameof(Pawn.GetDisabledWorkTypes));
 
 		[HarmonyPriority(Priority.VeryLow)]
-		public static bool Prefix(Pawn __instance, bool permanentOnly, out List<WorkTypeDef> __result)
-			=> (__result = permanentOnly
+		public static bool Prefix(Pawn __instance, bool permanentOnly, ref List<WorkTypeDef> __result)
+			=> Current.programStateInt != ProgramState.Playing
+				|| (__result = permanentOnly
 				? __instance.cachedDisabledWorkTypesPermanent
 				: __instance.cachedDisabledWorkTypes) is null;
 	}
