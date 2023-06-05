@@ -207,16 +207,21 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static IEnumerable<Building_Bed> ContainedBeds_Replacement(Room instance)
 		{
+			var uniqueContainedBeds = instance.UniqueContainedBeds();
+			uniqueContainedBeds.Clear();
+			
 			var regions = instance.Regions;
-			for (var i = 0; i < regions.Count; i++)
+			for (var i = regions.Count; i-- > 0;)
 			{
 				var beds = regions[i].ListerThings.listsByGroup[(int)ThingRequestGroup.Bed];
 				if (beds is null)
 					continue;
 
-				for (var j = 0; j < beds.Count; j++)
-					yield return (Building_Bed)beds[j];
+				for (var j = beds.Count; j-- > 0;)
+					uniqueContainedBeds.Add((Building_Bed)beds[j]);
 			}
+
+			return uniqueContainedBeds;
 		}
 	}
 

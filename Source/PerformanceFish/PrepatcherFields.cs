@@ -14,14 +14,14 @@ public static class PrepatcherFields
 	[PrepatcherField]
 	[ValueInitializer(nameof(CreateGeneList))]
 	public static extern List<Gene> GenesToTick(this Pawn_GeneTracker geneTracker);
-	
-	// [PrepatcherField]
-	// [ValueInitializer(nameof(CreateGeneList))]
-	// public static extern List<Gene> EndogenesToTick(this Pawn_GeneTracker geneTracker);
 
 	[PrepatcherField]
 	[ValueInitializer(nameof(CreateWorldPawnsCache))]
 	public static extern ref WorldPawnsOptimization.Cache Cache(this WorldPawns worldPawns);
+
+	[PrepatcherField]
+	[ValueInitializer(nameof(CreateBedHashSet))]
+	public static extern HashSet<Building_Bed> UniqueContainedBeds(this Room room);
 
 #if false
 	[PrepatcherField]
@@ -33,4 +33,5 @@ public static class PrepatcherFields
 	
 	public static List<Gene> CreateGeneList() => new();
 	public static WorldPawnsOptimization.Cache CreateWorldPawnsCache() => new();
+	public static HashSet<Building_Bed> CreateBedHashSet() => new();
 }
