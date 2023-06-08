@@ -84,8 +84,8 @@ public class WorldObjectsOptimization : ClassWithFishPrepatches
 		}
 
 		public static int
-			CachedWorldObjectsVersion,
-			CachedMapsVersion;
+			CachedWorldObjectsVersion = -2,
+			CachedMapsVersion = -2;
 
 		private static Type[]
 			_whitelistedTickingCompTypes
@@ -110,5 +110,9 @@ public class WorldObjectsOptimization : ClassWithFishPrepatches
 		public static bool CacheDirty(WorldObjectsHolder instance)
 			=> CachedWorldObjectsVersion != instance.worldObjects._version
 			|| CachedMapsVersion != Current.gameInt.maps._version;
+
+		public static void SetDirty() => CachedWorldObjectsVersion = CachedMapsVersion = -2;
+
+		static WorldObjectsHolderTickPatch() => Cache.Utility.Cleared += SetDirty;
 	}
 }

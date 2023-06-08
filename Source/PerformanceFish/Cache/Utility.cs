@@ -15,6 +15,8 @@ public static class Utility
 {
 	public static event Action<Thing>? ThingDestroyed; // TODO
 
+	public static event Action? Cleared;
+
 	private static volatile int _destroyedThingCounter, _lastGCTick, _gcRate = 1000;
 	private static int _currentGCProgress;
 	private static volatile bool _gcInProgress;
@@ -88,6 +90,8 @@ public static class Utility
 	{
 		foreach (var cache in All)
 			cache.Clear();
+		
+		Cleared?.Invoke();
 	}
 
 	public static void LogCurrentCacheUtilization()

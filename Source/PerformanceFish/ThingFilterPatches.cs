@@ -290,7 +290,8 @@ public class ThingFilterPatches : ClassWithFishPatches
 
 			if (recipe?.ingredients is { } ingredients)
 				ingredients.RemoveAll(static ingredientCount => ingredientCount is null);
-			else if (def.CostList is { } costList)
+			
+			if (def.CostList is { } costList)
 				costList.RemoveAll(static thingDefCountClass => thingDefCountClass?.thingDef is null);
 
 			try

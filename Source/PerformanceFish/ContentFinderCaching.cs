@@ -22,7 +22,7 @@ public class ContentFinderCaching : ClassWithFishPrepatches
 		{
 			ref var cache = ref Cache.ByReference<string, CacheValue<T>>.GetOrAddReference(itemPath);
 			
-			if (!cache.Cached)
+			if (!cache.Cached || !OnStartup.State.Initialized)
 				return __state = true;
 			
 			__result = cache.Value;

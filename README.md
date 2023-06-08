@@ -2,7 +2,7 @@
 ![](About/Preview.png?raw=true)  
   
 Performance Mod for Rimworld.  
-Requires Prepatcher and Fishery.  
+Requires [Prepatcher](https://github.com/Zetrith/Prepatcher) and [Fishery](https://github.com/bbradson/Fishery).  
   
 Performance Fish attempts to improve overall framerates and tick times by patching various methods for improved efficiency, while keeping functionality identical. Designed to be used alongside other performance mods, like RocketMan, and intended to be compatible with very large modlists. Most patches become more impactful as the game progresses further into the lategame.  
   
