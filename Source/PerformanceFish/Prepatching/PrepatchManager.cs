@@ -100,8 +100,11 @@ public static class PrepatchManager
 	{
 		var types = module.Types;
 		
-		Parallel.For(0, types.Count, // about 20% faster than sequential for in testing
-			i => ModifyAllMethodsIn(types[i]));
+		// Parallel.For(0, types.Count, // about 20% faster than sequential for in testing
+		// 	i => ModifyAllMethodsIn(types[i]));
+
+		for (var i = 0; i < types.Count; i++)
+			ModifyAllMethodsIn(types[i]);
 	}
 
 	private static void ModifyAllMethodsIn(TypeDefinition type)

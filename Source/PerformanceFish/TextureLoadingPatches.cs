@@ -41,7 +41,7 @@ public class TextureLoadingPatches : ClassWithFishPrepatches
 		public static bool Prefix<T>(VirtualFile file, ref LoadedContentItem<T>? __result) where T : class
 		{
 			if (typeof(T) != typeof(Texture2D)
-				|| GetFileInfo(file).Extension.Equals(DDS_EXTENSION, StringComparison.OrdinalIgnoreCase)
+				|| (GetFileInfo(file)?.Extension.Equals(DDS_EXTENSION, StringComparison.OrdinalIgnoreCase) ?? true)
 				|| !File.Exists(Path.ChangeExtension(file.FullPath, DDS_EXTENSION)))
 			{
 				return true;
@@ -71,12 +71,12 @@ public class TextureLoadingPatches : ClassWithFishPrepatches
 			Texture2D? texture2D;
 
 			var fileInfo = GetFileInfo(file);
-			var isDds = fileInfo.Extension.Equals(DDS_EXTENSION, StringComparison.OrdinalIgnoreCase);
+			var isDds = fileInfo?.Extension.Equals(DDS_EXTENSION, StringComparison.OrdinalIgnoreCase) ?? false;
 			var hasStoredMipMaps = false;
 			
 			if (isDds)
 			{
-				texture2D = DDSLoader.LoadDDS(fileInfo.OpenRead(), out hasStoredMipMaps);
+				texture2D = DDSLoader.LoadDDS(fileInfo!.OpenRead(), out hasStoredMipMaps);
 				
 				if (!DDSLoader.error.NullOrEmpty())
 					LogDDSLoadingError(file);
@@ -143,7 +143,8 @@ public class TextureLoadingPatches : ClassWithFishPrepatches
 			=> Log.Warning($"DDS error at '{file.FullPath}': {DDSLoader.error}");
 	}
 
-	public static FileInfo GetFileInfo(VirtualFile file) => ((FilesystemFile)file).fileInfo;
+	public static FileInfo? GetFileInfo(VirtualFile file)
+		=> file is FilesystemFile systemFile ? systemFile.fileInfo : null;
 
 	public class GetAllFilesForModPatch : FishPrepatch
 	{

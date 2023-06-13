@@ -185,5 +185,5 @@ public static class DDSLoader
 	}
 
 	private static bool FourCcEquals(IList<byte> bytes, string s)
-		=> bytes[0] == s[0] && bytes[1] == s[1] && bytes[2] == s[2] && bytes[3] == s[3];
+		=> bytes.Count >= 4 && bytes[0] == s[0] && bytes[1] == s[1] && bytes[2] == s[2] && bytes[3] == s[3];
 }
