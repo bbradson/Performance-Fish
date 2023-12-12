@@ -254,12 +254,11 @@ public class WorkGiver_DoBillOptimization : ClassWithFishPatches
 				
 				if (cachedSmallestList.Count != smallestFilter.allowedDefs.Count)
 				{
-					// Log.Warning($"Cached list count: {cachedSmallestList.Count}, actual filter list count: {
-					// 	smallestFilter.allowedDefs.Count}. Forcing a refresh now to fix.");
+					Log.Warning($"Cached list count: {cachedSmallestList.Count}, actual filter list count: {
+						smallestFilter.allowedDefs.Count}. Forcing a refresh now to fix.");
 					ThingFilterPatches.ForceSynchronizeCache(smallestFilter);
-					// Log.Warning($"New cached list count: {cachedSmallestList.Count}, actual filter list count: {
-					// 	smallestFilter.allowedDefs.Count}.");
-					// didn't trigger in 1.3, but now does. Fuck
+					Log.Warning($"New cached list count: {cachedSmallestList.Count}, actual filter list count: {
+						smallestFilter.allowedDefs.Count}.");
 				}
 
 				var smallestListCount = cachedSmallestList.Count;

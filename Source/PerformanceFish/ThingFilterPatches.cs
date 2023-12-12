@@ -101,8 +101,12 @@ public class ThingFilterPatches : ClassWithFishPatches
 			= static () => default(ThingFilter)!.CopyAllowancesFrom(null);
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static void Prefix(ThingFilter __instance)
-			=> AllowedDefsListCache.GetAndCheck<AllowedDefsListCacheValue>(__instance).Defs.Clear();
+		public static void Prefix(ThingFilter __instance, ThingFilter other)
+		{
+			var defs = AllowedDefsListCache.GetAndCheck<AllowedDefsListCacheValue>(__instance).Defs;
+			defs.Clear();
+			defs.AddRange(other.AllowedThingDefs);
+		}
 	}
 
 	public class SetAllow_Patch : FishPatch
