@@ -6,14 +6,15 @@
 global using AllowedDefsListCache
 	= PerformanceFish.Cache.ByReference<Verse.ThingFilter,
 		PerformanceFish.ThingFilterPatches.AllowedDefsListCacheValue>;
+using System.Linq;
 using PerformanceFish.Cache;
 
 namespace PerformanceFish;
 
-public class ThingFilterPatches : ClassWithFishPatches
+public sealed class ThingFilterPatches : ClassWithFishPatches
 {
 	public override bool RequiresLoadedGameForPatching => true;
-	/*public class Allows_Patch : FishPatch
+	/*public sealed class Allows_Patch : FishPatch
 	{
 		public override Expression<Action> TargetMethod { get; } = static () => new ThingFilter().Allows(null as Thing);
 
@@ -55,7 +56,7 @@ public class ThingFilterPatches : ClassWithFishPatches
 		}
 	}*/
 
-	public class AllowedThingDefs_Patch : FishPatch
+	public sealed class AllowedThingDefs_Patch : FishPatch
 	{
 		public override string Description { get; }
 			= "Small optimization. Returns a list instead of hashset for better performance when enumerating";
@@ -70,29 +71,31 @@ public class ThingFilterPatches : ClassWithFishPatches
 			=> Reflection.GetCodeInstructions(Replacement);
 	}
 
-	public class AllStorableThingDefs_Patch : FishPatch
+	public sealed class AllStorableThingDefs_Patch : FishPatch
 	{
 		public override string Description { get; } = "Small optimization";
 
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.PropertyGetter(typeof(ThingFilter), nameof(ThingFilter.AllStorableThingDefs));
 
-		public static IEnumerable<ThingDef> Replacement()
-		{
-			var allDefs = DefDatabase<ThingDef>.defsList;
-			var count = allDefs.Count;
-			for (var i = 0; i < count; i++)
-			{
-				if (allDefs[i].EverStorable(true))
-					yield return allDefs[i];
-			}
-		}
+		public static ThingDef[]? AllStorableThingDefsCache;
+
+		public static IEnumerable<ThingDef> Replacement() => AllStorableThingDefsCache ?? Update();
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static IEnumerable<ThingDef> Update()
+			=> Current.ProgramState != ProgramState.Playing
+				? Original()
+				: AllStorableThingDefsCache = Original().ToArray();
+
+		public static IEnumerable<ThingDef> Original()
+			=> DefDatabase<ThingDef>.AllDefs.Where(static def => def.EverStorable(true));
 
 		public static CodeInstructions Transpiler(CodeInstructions codes)
 			=> Reflection.MakeReplacementCall(Replacement);
 	}
 
-	public class CopyAllowancesFrom_Patch : FirstPriorityFishPatch
+	public sealed class CopyAllowancesFrom_Patch : FirstPriorityFishPatch
 	{
 		public override string Description { get; }
 			= "Used by the WorkGiver_DoBill patch to allow for faster refreshing of its cache";
@@ -109,7 +112,7 @@ public class ThingFilterPatches : ClassWithFishPatches
 		}
 	}
 
-	public class SetAllow_Patch : FishPatch
+	public sealed class SetAllow_Patch : FishPatch
 	{
 		public override string Description { get; }
 			= "Used by the WorkGiver_DoBill patch to allow for faster refreshing of its cache";
@@ -149,7 +152,7 @@ public class ThingFilterPatches : ClassWithFishPatches
 		private static int ComparerMethod(ThingDef a, ThingDef b) => a.BaseMarketValue.CompareTo(b.BaseMarketValue);
 	}
 
-	public class SetDisallowAll_Patch : FishPatch
+	public sealed class SetDisallowAll_Patch : FishPatch
 	{
 		public override string Description { get; }
 			= "Used by the WorkGiver_DoBill patch to allow for faster refreshing of its cache";
@@ -161,7 +164,7 @@ public class ThingFilterPatches : ClassWithFishPatches
 		public static void Postfix(ThingFilter __instance) => ForceSynchronizeCache(__instance);
 	}
 
-	public class SetAllowAll_Patch : FishPatch
+	public sealed class SetAllowAll_Patch : FishPatch
 	{
 		public override string Description { get; }
 			= "Used by the WorkGiver_DoBill patch to allow for faster refreshing of its cache";
@@ -173,31 +176,22 @@ public class ThingFilterPatches : ClassWithFishPatches
 		public static void Postfix(ThingFilter __instance) => ForceSynchronizeCache(__instance);
 	}
 
-	public class BestThingRequest_Patch : FishPatch
+	public sealed class BestThingRequest_Patch : FishPatch
 	{
+		public override List<Type> LinkedPatches { get; } = [typeof(Listers.Things.ThingsMatching_Patch)];
+
 		public override string? Description { get; }
 			= "RimWorld is normally only capable of creating ThingRequests either for predefined groups or for single "
 			+ "defs. This patch makes ThingFilters return requests for multiple defs, improving performance for "
 			+ "cases where the fallback group would have to be something like all haulables. Refueling benefits a "
 			+ "lot from this. Requires the patch on ListerThings.ThingsMatching to function.";
 
-		public override bool Enabled
-		{
-			set
-			{
-				if (base.Enabled == value)
-					return;
-
-				Get<Listers.Things.ThingsMatching_Patch>().Enabled = base.Enabled = value;
-			}
-		}
-
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.PropertyGetter(typeof(ThingFilter), nameof(ThingFilter.BestThingRequest));
 
 		public static void Postfix(ThingFilter __instance, ref ThingRequest __result)
 		{
-			if (__result.group is not (ThingRequestGroup.HaulableEver or ThingRequestGroup.Everything)
+			if (__result.group is not ThingRequestGroup.HaulableEver and not ThingRequestGroup.Everything
 				|| __instance.allowedDefs.Count > 16)
 			{
 				return;
@@ -213,7 +207,7 @@ public class ThingFilterPatches : ClassWithFishPatches
 
 	public record struct AllowedDefsListCacheValue : ICacheable<ThingFilter>, ICacheable<ThingFilter, int>
 	{
-		public List<ThingDef> Defs = new();
+		public List<ThingDef> Defs = [];
 		private int _nextRefreshTick = -2;
 
 		public bool Dirty
@@ -230,7 +224,8 @@ public class ThingFilterPatches : ClassWithFishPatches
 		public void Update(ref ThingFilter key, int tickOffset)
 		{
 			var allowedDefs = key.allowedDefs;
-			allowedDefs.Remove(null); // apparently happens
+			while (allowedDefs.Remove(null))
+				; // apparently happens
 
 			Defs.ReplaceContentsWith(allowedDefs);
 

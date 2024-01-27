@@ -3,11 +3,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.InteropServices;
 using JetBrains.Annotations;
-using PerformanceFish.Pools;
+using FisheryLib.Pools;
 using PerformanceFish.Prepatching;
 
 namespace PerformanceFish;
@@ -93,6 +93,7 @@ public static class Log
 	public static UnhandledMessageQueue? UnhandledMessages { get; }
 		= SetupUnhandledMessageQueue();
 
+	[SuppressMessage("Reliability", "CA2000")]
 	private static UnhandledMessageQueue? SetupUnhandledMessageQueue()
 	{
 		if (Ready)
@@ -105,8 +106,7 @@ public static class Log
 			return stashedMessages;
 		}
 
-		stash.UnhandledMessages = stashedMessages = new();
-		stash.MessageQueueGCHandle = GCHandle.Alloc(stashedMessages, GCHandleType.Pinned);
+		stash.MessageQueueGCHandle = GCHandle.Alloc(new UnhandledMessageQueue(), GCHandleType.Pinned);
 		return stash.UnhandledMessages;
 	}
 	
@@ -114,7 +114,7 @@ public static class Log
 }
 
 [StructLayout(LayoutKind.Sequential)]
-public struct LogMessageData : IDisposable
+public record struct LogMessageData : IDisposable
 {
 	public IntPtr Text,
 		StackTrace;
@@ -188,18 +188,19 @@ public unsafe class UnhandledMessageQueue : IDisposable
 		else
 		{
 			_arrayLength <<= 1;
-			_messages = (LogMessageData*)Marshal.ReAllocHGlobal((IntPtr)_messages, (IntPtr)_arrayLength);
+			_messages = (LogMessageData*)Marshal.ReAllocHGlobal((IntPtr)_messages,
+				(IntPtr)(_arrayLength * sizeof(LogMessageData)));
 		}
 	}
 	
 	// ReSharper disable once InconsistentlySynchronizedField
-	private void ReleaseUnmanagedResources() => Marshal.FreeHGlobal((IntPtr)_messages);
+	protected virtual void Dispose(bool disposing) => Marshal.FreeHGlobal((IntPtr)_messages);
 
 	public void Dispose()
 	{
-		ReleaseUnmanagedResources();
+		Dispose(true);
 		GC.SuppressFinalize(this);
 	}
 
-	~UnhandledMessageQueue() => ReleaseUnmanagedResources();
+	~UnhandledMessageQueue() => Dispose(false);
 }

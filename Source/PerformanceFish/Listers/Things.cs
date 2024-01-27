@@ -3,26 +3,195 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+using Mono.Cecil;
+using Mono.Cecil.Cil;
+using PerformanceFish.Prepatching;
+
 namespace PerformanceFish.Listers;
 
-public class Things : ClassWithFishPatches
+public sealed class ThingsPrepatches : ClassWithFishPrepatches
 {
-	public class ThingsMatching_Patch : FirstPriorityFishPatch
+	public sealed class AddPatch : FishPrepatch
 	{
+		public override string? Description { get; }
+			= "Required to keep the ListerThings cache synced";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerThings), nameof(ListerThings.Add));
+		
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		public static void ReplacementBody(ListerThings __instance, Thing t)
+		{
+			if (!ListerThings.EverListable(t.def, __instance.use))
+				return;
+			
+			AddToDefList(__instance, t);
+
+			var allGroups = ThingListGroupHelper.AllGroups;
+			foreach (var thingRequestGroup in allGroups)
+			{
+				if ((__instance.use == ListerThingsUse.Region && !thingRequestGroup.StoreInRegion())
+					|| !thingRequestGroup.Includes(t.def))
+				{
+					continue;
+				}
+
+				AddToGroupList(__instance, t, thingRequestGroup);
+			}
+		}
+	}
+
+	public sealed class RemovePatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Optimizes ListerThings to keep a cache of thing indices within the lister, to greatly speed up removal "
+			+ "and in turn improve performance when despawning happens. Late game colonies and maps in biomes with "
+			+ "large amounts of plants benefit most from this";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerThings), nameof(ListerThings.Remove));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		public static void ReplacementBody(ListerThings __instance, Thing t)
+		{
+			if (!ListerThings.EverListable(t.def, __instance.use))
+				return;
+
+			RemoveFromDefList(__instance, t);
+
+			var allGroups = ThingListGroupHelper.AllGroups;
+			for (var i = 0; i < allGroups.Length; i++)
+			{
+				var thingRequestGroup = allGroups[i];
+				if ((__instance.use == ListerThingsUse.Region && !thingRequestGroup.StoreInRegion())
+					|| !thingRequestGroup.Includes(t.def))
+				{
+					continue;
+				}
+				
+				RemoveFromGroupList(__instance, t, thingRequestGroup);
+			}
+		}
+	}
+
+	public static void AddToDefList(ListerThings lister, Thing thing)
+	{
+		if (!lister.listsByDef.TryGetValue(thing.def, out var value))
+		{
+			value = [];
+			lister.listsByDef.Add(thing.def, value);
+		}
+
+		value.Add(thing);
+		lister.IndexMapByDef()[thing.GetKey()] = lister.listsByDef[thing.def].Count - 1;
+	}
+
+	public static void AddToGroupList(ListerThings lister, Thing thing, ThingRequestGroup thingRequestGroup)
+	{
+		var list = lister.listsByGroup[(uint)thingRequestGroup];
+		if (list == null)
+		{
+			list = [];
+			lister.listsByGroup[(uint)thingRequestGroup] = list;
+			lister.stateHashByGroup[(uint)thingRequestGroup] = 0;
+		}
+
+		list.Add(thing);
+		lister.stateHashByGroup[(uint)thingRequestGroup]++;
+
+		lister.IndexMapByGroup()[new(thingRequestGroup, thing.GetKey())]
+			= lister.listsByGroup[(uint)thingRequestGroup].Count - 1;
+	}
+
+	public static void RemoveFromDefList(ListerThings lister, Thing thing)
+	{
+		var thingKey = thing.GetKey();
+		var indexMapByDef = lister.IndexMapByDef();
+		var listByDef = lister.listsByDef[thing.def];
+
+		var indexByDef = indexMapByDef.TryGetValue(thingKey, out var knownIndexByDef)
+			&& knownIndexByDef < listByDef.Count
+			&& listByDef[knownIndexByDef] == thing
+				? knownIndexByDef
+				: listByDef.LastIndexOf(thing);
+
+		if (indexByDef >= 0)
+			listByDef.RemoveAtFastUnordered(indexByDef);
+
+		indexMapByDef.Remove(thingKey);
+		if (indexByDef < listByDef.Count && indexByDef >= 0)
+			indexMapByDef[listByDef[indexByDef].GetKey()] = indexByDef;
+	}
+
+	public static void RemoveFromGroupList(ListerThings lister, Thing thing, ThingRequestGroup thingRequestGroup)
+	{
+		var indexMapByGroup = lister.IndexMapByGroup();
+		var listByGroup = lister.listsByGroup[(int)thingRequestGroup];
+
+		var groupMapKey = new GroupThingPair(thingRequestGroup, thing.GetKey());
+
+		var indexByGroup
+			= indexMapByGroup.TryGetValue(groupMapKey, out var knownIndexByGroup)
+			&& knownIndexByGroup < listByGroup.Count
+			&& listByGroup[knownIndexByGroup] == thing
+				? knownIndexByGroup
+				: listByGroup.LastIndexOf(thing);
+
+		if (indexByGroup >= 0)
+			listByGroup.RemoveAtFastUnordered(indexByGroup);
+
+		indexMapByGroup.Remove(groupMapKey);
+		if (indexByGroup < listByGroup.Count && indexByGroup >= 0)
+			indexMapByGroup[new(thingRequestGroup, listByGroup[indexByGroup].GetKey())] = indexByGroup;
+
+		lister.stateHashByGroup[(uint)thingRequestGroup]++;
+	}
+
+	public sealed class ContainsPatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Optimization utilizing a cache for faster Contains checks";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerThings), nameof(ListerThings.Contains));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		public static bool ReplacementBody(ListerThings __instance, Thing t)
+			=> __instance.IndexMapByDef().ContainsKey(t.GetKey())
+				|| (__instance.listsByDef.TryGetValue(t.def)?.Contains(t) ?? false);
+	}
+
+	public sealed class ClearPatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Required to keep the ListerThings cache synced";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerThings), nameof(ListerThings.Clear));
+
+		public static void Postfix(ListerThings __instance)
+		{
+			__instance.IndexMapByDef().Clear();
+			__instance.IndexMapByGroup().Clear();
+		}
+	}
+}
+
+public sealed class Things : ClassWithFishPatches
+{
+	public sealed class ThingsMatching_Patch : FirstPriorityFishPatch
+	{
+		public override List<Type> LinkedPatches { get; } = [typeof(ThingFilterPatches.BestThingRequest_Patch)];
+
 		public override string Description { get; }
 			= "Part of the ThingFilter.BestThingRequest optimization. Required by that particular patch and gets "
 			+ "toggled alongside it";
-
-		public override bool Enabled
-		{
-			set
-			{
-				if (base.Enabled == value)
-					return;
-
-				Get<ThingFilterPatches.BestThingRequest_Patch>().Enabled = base.Enabled = value;
-			}
-		}
 
 		public override Expression<Action> TargetMethod { get; }
 			= static () => new ListerThings(default).ThingsMatching(default);
@@ -61,7 +230,7 @@ public class Things : ClassWithFishPatches
 	private static Dictionary<IEnumerable<ThingDef>, List<Thing>>? _thingsOfDefsDictionary;
 
 #if disabled
-	public class ThingRequest_IsUndefined_Patch : FishPatch
+	public sealed class ThingRequest_IsUndefined_Patch : FishPatch
 	{
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.PropertyGetter(typeof(ThingRequest), nameof(ThingRequest.IsUndefined));
@@ -79,7 +248,7 @@ public class Things : ClassWithFishPatches
 			=> __instance.group == ThingRequestGroup.Undefined && !((FishCache)__instance.singleDef).IsSingleDef;
 	}
 
-	public class ThingRequest_CanBeFoundInRegion_Patch : FirstPriorityFishPatch
+	public sealed class ThingRequest_CanBeFoundInRegion_Patch : FirstPriorityFishPatch
 	{
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.PropertyGetter(typeof(ThingRequest), nameof(ThingRequest.CanBeFoundInRegion));
@@ -99,7 +268,7 @@ public class Things : ClassWithFishPatches
 					&& (__instance.group == ThingRequestGroup.Nothing || __instance.group.StoreInRegion()));
 	}
 
-	public class Add_Patch : FishPatch
+	public sealed class Add_Patch : FishPatch
 	{
 		public override Expression<Action> TargetMethod { get; } = static () => new ListerThings(default).Add(null);
 
@@ -112,7 +281,7 @@ public class Things : ClassWithFishPatches
 		}
 	}
 
-	public class Remove_Patch : FishPatch
+	public sealed class Remove_Patch : FishPatch
 	{
 		public override Expression<Action> TargetMethod { get; } = static () => new ListerThings(default).Remove(null);
 
@@ -125,7 +294,7 @@ public class Things : ClassWithFishPatches
 		}
 	}
 
-	public class Clear_Patch : FishPatch
+	public sealed class Clear_Patch : FishPatch
 	{
 		public override Expression<Action> TargetMethod { get; } = static () => new ListerThings(default).Clear();
 
@@ -138,7 +307,7 @@ public class Things : ClassWithFishPatches
 		}
 	}
 
-	public class ThingsMatching_Patch : FirstPriorityFishPatch
+	public sealed class ThingsMatching_Patch : FirstPriorityFishPatch
 	{
 		public override string Description { get; } = "Part of the work scanning optimization";
 

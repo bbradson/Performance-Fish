@@ -3,300 +3,246 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-using System.Linq;
+using Mono.Cecil;
+using Mono.Cecil.Cil;
+using PerformanceFish.Prepatching;
 
 namespace PerformanceFish.Listers;
 
-public class Buildings : ClassWithFishPatches
+public sealed class Buildings : ClassWithFishPrepatches
 {
-	/// <summary>
-	/// Get Things from the ListerThings dictionary with a rather quick lookup instead of looping over every single element in the lists of listerBuildings
-	/// </summary>
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static List<Thing> ThingsOfDefFast(ListerThings listerThings, ThingDef def)
-		=> listerThings.listsByDef.TryGetValue(def) ?? ListerThings.EmptyList;
-
-	public class ColonistsHaveBuilding_Patch : FishPatch
+	public sealed class AllBuildingsColonistOfClassPatch : FishPrepatch
 	{
 		public override string Description { get; }
-			= "ListerBuildings optimization. Should be relatively riskfree, but doesn't impact performance much "
-				+ "outside of a few prevented spikes here and there either";
+			= "Optimizes building lookups for generic types on ListerBuildings to directly return the result of cached "
+			+ "data instead of iterating over all buildings on the map trying to find all matches";
+		
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerBuildings), nameof(ListerBuildings.AllBuildingsColonistOfClass));
 
-		public override Expression<Action> TargetMethod { get; }
-			= static () => default(ListerBuildings)!.ColonistsHaveBuilding(default(ThingDef));
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody<Building>);
 
-		public static bool Prefix(ListerBuildings __instance, ref bool __result, ThingDef def)
-		{
-			var lister = GetListerThings(__instance);
-			if (lister is null)
-				return true;
+		public static IEnumerable<T> ReplacementBody<T>(ListerBuildings __instance) where T : Building
+			=> (IEnumerable<T>)__instance.Cache().ColonistBuildingsByType.GetOrAdd(typeof(T));
+	}
+	
+	public sealed class ColonistsHaveResearchBenchPatch : FishPrepatch
+	{
+		public override string Description { get; }
+			= "Optimizes research bench lookups on ListerBuildings to directly return the result of cached data "
+			+ "instead of iterating over all buildings on the map trying to find the bench";
 
-			__result = ContainsDefForColonists(lister, def);
-			return false;
-		}
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerBuildings), nameof(ListerBuildings.ColonistsHaveResearchBench));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		public static bool ReplacementBody(ListerBuildings __instance)
+			=> __instance.Cache().ColonistResearchBenches.Count > 0;
+	}
+	
+	public sealed class ColonistsHaveBuildingPatch : FishPrepatch
+	{
+		public override string Description { get; }
+			= "Optimizes building lookups by def on ListerBuildings to directly return the result of cached "
+			+ "data instead of iterating over all buildings on the map trying to find any matches";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerBuildings), nameof(ListerBuildings.ColonistsHaveBuilding),
+				[typeof(ThingDef)]);
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		public static bool ReplacementBody(ListerBuildings __instance, ThingDef def)
+			=> __instance.Cache().ColonistBuildingsByDef.GetOrAdd(def).Count > 0;
 	}
 
-	public class ColonistsHaveResearchBench_Patch : FishPatch
+	public sealed class AllBuildingsColonistOfDef_Patch : FishPrepatch
 	{
 		public override string Description { get; }
-			= "ListerBuildings optimization. Should be relatively riskfree, but doesn't impact performance much "
-				+ "outside of a few prevented spikes here and there either";
+			= "Optimizes building lookups by def on ListerBuildings to directly return the result of cached "
+			+ "data instead of iterating over all buildings on the map trying to find all matches. Relatively large "
+			+ "performance impact when having water power plants on the map";
 
-		public override Expression<Action> TargetMethod { get; }
-			= static () => default(ListerBuildings)!.ColonistsHaveResearchBench();
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerBuildings), nameof(ListerBuildings.AllBuildingsColonistOfDef));
 
-		public static bool Prefix(ListerBuildings __instance, ref bool __result)
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		public static IEnumerable<Building> ReplacementBody(ListerBuildings __instance, ThingDef def)
+			=> __instance.Cache().ColonistBuildingsByDef.GetOrAdd(def);
+	}
+
+	public sealed class AllBuildingsNonColonistOfDef_Patch : FishPrepatch
+	{
+		public override string Description { get; }
+			= "Optimizes building lookups by def on ListerBuildings to directly return the result of cached "
+			+ "data instead of iterating over all buildings on the map trying to find all matches";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerBuildings), nameof(ListerBuildings.AllBuildingsNonColonistOfDef));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		public static IEnumerable<Building> ReplacementBody(ListerBuildings __instance, ThingDef def)
+			=> __instance.Cache().NonColonistBuildingsByDef.GetOrAdd(def);
+	}
+	
+	public sealed class ColonistsHaveBuildingWithPowerOnPatch : FishPrepatch
+	{
+		public override string Description { get; }
+			= "Optimizes lookups for powered buildings of a given def on ListerBuildings to directly return the result "
+			+ "of cached data instead of iterating over all buildings on the map trying to find any matches";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerBuildings),
+				nameof(ListerBuildings.ColonistsHaveBuildingWithPowerOn));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		public static bool ReplacementBody(ListerBuildings __instance, ThingDef def)
 		{
-			var lister = GetListerThings(__instance);
-			if (lister is null)
-				return true;
-
-			var researchBenches = LazyInit.ResearchBenches;
-			for (var i = 0; i < researchBenches.Length; i++)
+			var colonistBuildingsOfDef = __instance.Cache().ColonistBuildingsByDef.GetOrAdd(def);
+			
+			for (var i = 0; i < colonistBuildingsOfDef.Count; i++)
 			{
-				if (!ContainsDefForColonists(lister, researchBenches[i]))
-					continue;
-
-				__result = true;
-				break;
+				if (colonistBuildingsOfDef[i].TryGetComp<CompPowerTrader>() is not { PowerOn: false })
+					return true;
 			}
 
 			return false;
 		}
-
-		public static class LazyInit
-		{
-			public static ThingDef[] ResearchBenches = DefDatabase<ThingDef>.AllDefsListForReading
-				.Where(static def => def.thingClass == typeof(Building_ResearchBench)).ToArray();
-
-			static LazyInit()
-			{
-				// beforefieldinit
-			}
-		}
 	}
-
-	public class ColonistsHaveBuildingWithPowerOn_Patch : FishPatch
+	
+	public sealed class AddPatch : FishPrepatch
 	{
-		public override string Description { get; }
-			= "ListerBuildings optimization. Should be relatively riskfree, but doesn't impact performance much "
-				+ "outside of a few prevented spikes here and there either";
+		public override List<Type> LinkedPatches { get; } =
+		[
+			typeof(AllBuildingsColonistOfClassPatch), typeof(ColonistsHaveResearchBenchPatch),
+			typeof(ColonistsHaveBuildingPatch), typeof(AllBuildingsColonistOfDef_Patch),
+			typeof(ColonistsHaveBuildingWithPowerOnPatch),
+			typeof(DeepResourceGridOptimization.AnyActiveDeepScannersOnMapPatch)
+		];
+		
+		public override string? Description { get; }
+			= "Required for all other ListerBuildings patches. This assigns buildings to the cache when they're "
+			+ "spawned";
 
-		public override Expression<Action> TargetMethod { get; }
-			= static () => default(ListerBuildings)!.ColonistsHaveBuildingWithPowerOn(null);
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerBuildings), nameof(ListerBuildings.Add));
 
-		public static bool Prefix(ListerBuildings __instance, ref bool __result, ThingDef def)
+		public static void Postfix(ListerBuildings __instance, Building b)
 		{
-			var lister = GetListerThings(__instance);
-			if (lister is null)
-				return true;
+			var def = b.def;
+			
+			if (def.building is { isNaturalRock: true })
+				return;
 
-			var things = ThingsOfDefFast(lister, def);
-			var playerFaction = Faction.OfPlayerSilentFail;
-			for (var i = 0; i < things.Count; i++)
+			var cache = __instance.Cache();
+			
+			if (b.Faction == Faction.OfPlayer)
 			{
-				if (things[i].Faction != playerFaction
-					|| things[i].TryGetComp<CompPowerTrader>() is { PowerOn: false })
-				{
-					continue;
-				}
-
-				__result = true;
-				break;
-			}
-
-			return false;
-		}
-	}
-
-	public class AllBuildingsColonistOfDef_Patch : FishPatch
-	{
-		public override string Description { get; }
-			= "ListerBuildings optimization. Relatively large performance impact when having water power plants on the "
-			+ "map.";
-
-		public override Expression<Action> TargetMethod { get; }
-			= static () => default(ListerBuildings)!.AllBuildingsColonistOfDef(null);
-
-		public static bool Prefix(ListerBuildings __instance, ref IEnumerable<Building> __result, ThingDef def)
-		{
-			var lister = GetListerThings(__instance);
-			if (lister is null)
-				return true;
-
-			__result = AllBuildingsColonistOfDefReplacement(lister, def);
-			return false;
-		}
-
-		public static IEnumerable<Building> AllBuildingsColonistOfDefReplacement(ListerThings lister, ThingDef def)
-		{
-			var things = ThingsOfDefFast(lister, def);
-			var playerFaction = Faction.OfPlayerSilentFail;
-			for (var i = 0; i < things.Count; i++)
-			{
-				if (things[i] is Building building)
-				{
-					if (building.Faction == playerFaction)
-						yield return building;
-				}
-				else
-				{
-					ThrowWarning(def, things[i]);
-					yield break;
-				}
-			}
-		}
-	}
-
-	public record struct AllBuildingsColonistOfDefCacheValue
-	{
-		public List<Building> Buildings;
-	}
-
-	public class AllBuildingsNonColonistOfDef_Patch : FishPatch
-	{
-		public override string Description { get; }
-			= "ListerBuildings optimization. Should be relatively riskfree, but doesn't impact performance much "
-			+ "outside of a few prevented spikes here and there either";
-
-		public override Expression<Action> TargetMethod { get; }
-			= static () => default(ListerBuildings)!.AllBuildingsNonColonistOfDef(null);
-
-		public static bool Prefix(ListerBuildings __instance, ref IEnumerable<Building> __result, ThingDef def)
-		{
-			var lister = GetListerThings(__instance);
-			if (lister is null)
-				return true;
-
-			__result = AllBuildingsNonColonistOfDefReplacement(lister, def);
-			return false;
-		}
-
-		public static IEnumerable<Building> AllBuildingsNonColonistOfDefReplacement(ListerThings lister, ThingDef def)
-		{
-			var things = ThingsOfDefFast(lister, def);
-			var playerFaction = Faction.OfPlayerSilentFail;
-			for (var i = 0; i < things.Count; i++)
-			{
-				if (things[i] is Building building)
-				{
-					if (building.Faction != playerFaction)
-						yield return building;
-				}
-				else
-				{
-					ThrowWarning(def, things[i]);
-					yield break;
-				}
-			}
-		}
-	}
-
-#if harmonyIsFailingOnThisOne
-	public class AllBuildingsColonistOfClass_Patch : FishPatch
-	{
-		public override string Description { get; }
-			= "ListerBuildings optimization. Should be relatively riskfree, but doesn't impact performance much "
-			+ "outside of a few prevented spikes here and there either";
-
-		public override Expression<Action> TargetMethod { get; }
-			= static () => default(ListerBuildings)!.AllBuildingsColonistOfClass<Building>();
-
-		public static bool Prefix(ListerBuildings __instance, MethodBase __originalMethod, ref IEnumerable __result)
-		{
-			var lister = GetListerThings(__instance);
-			if (lister is null)
-				return true;
-
-			var type = __originalMethod.GetGenericArguments()[0]; //<-- This always returns Building instead of the
-                                                         // type it's actually meant to look for
-			DebugLog.Message($"AllBuildingsColonistOfClass running for type {type.Name}");
-			if (!Replacements.TryGetValue(type, out var replacement))
-			{
-				Replacements.Add(type,
-					replacement = (GenericReplacementBase)Activator.CreateInstance(
-						typeof(GenericReplacement<>).MakeGenericType(type)));
-			}
-
-			__result = replacement.Replacement(lister);
-			return false;
-		}
-
-		public static Dictionary<Type, GenericReplacementBase> Replacements { get; } = new();
-
-		public abstract class GenericReplacementBase
-		{
-			public abstract IEnumerable Replacement(ListerThings lister);
-		}
-
-		public class GenericReplacement<T> : GenericReplacementBase where T : Building
-		{
-			public override IEnumerable Replacement(ListerThings lister)
-			{
-				buildingsOfClass ??= DefDatabase<ThingDef>.AllDefsListForReading
-					.Where(static def => def.thingClass == typeof(T)).ToArray();
+				cache.ColonistBuildingsByDef.GetOrAdd(def).Add(b);
+				if (b is Building_ResearchBench researchBench)
+					cache.ColonistResearchBenches.Add(researchBench);
 				
-				foreach (var def in buildingsOfClass)
+				if (b.TryGetComp<CompDeepScanner>() != null)
+					cache.ColonistDeepScanners.Add(b);
+				
+				var buildingType = b.GetType();
+
+				do
 				{
-					var things = ThingsOfDefFast(lister, def);
-					for (var i = 0; i < things.Count; i++)
-					{
-						if (things[i].Faction == Faction.OfPlayerSilentFail)
-							yield return things[i];
-					}
+					if (buildingType == null)
+						break;
+
+					cache.ColonistBuildingsByType.GetOrAdd(buildingType).Add(b);
 				}
+				while ((buildingType = buildingType.BaseType) != typeof(Building));
 			}
-
-			public ThingDef[]? buildingsOfClass;
+			else
+			{
+				cache.NonColonistBuildingsByDef.GetOrAdd(def).Add(b);
+			}
 		}
 	}
-#endif
 
-	public class Map_Patch : FishPatch
+	public sealed class RemovePatch : FishPrepatch
 	{
-		public override string Description { get; }
-			= "Part of the ListerBuildings optimizations. Without this patch mods like Colony Manager throw errors "
-				+ "during loading";
+		public override List<Type> LinkedPatches { get; } =
+		[
+			typeof(AllBuildingsColonistOfClassPatch), typeof(ColonistsHaveResearchBenchPatch),
+			typeof(ColonistsHaveBuildingPatch), typeof(AllBuildingsColonistOfDef_Patch),
+			typeof(ColonistsHaveBuildingWithPowerOnPatch),
+			typeof(DeepResourceGridOptimization.AnyActiveDeepScannersOnMapPatch)
+		];
 
-		public override MethodBase TargetMethodInfo { get; } = AccessTools.Constructor(typeof(Map));
-		public static void Postfix(Map __instance) => _tempMap = __instance;
-	}
+		public override string? Description { get; }
+			= "Required for all other ListerBuildings patches. This removes buildings from the map when they're "
+			+ "despawned";
 
-	private static Map? _tempMap;
-	// mapComps get constructed before maps are added to Game.Maps, so this makes the patches work there too
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerBuildings), nameof(ListerBuildings.Remove));
 
-	public static void ThrowWarning(ThingDef def, Thing thing)
-		=> Log.Warning($"Tried to get building of def {def}, but its type is {thing.GetType()} instead of Building");
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static ListerThings? GetListerThings(ListerBuildings listerBuildings)
-	{
-		var maps = Current.gameInt.Maps;
-		for (var i = 0; i < maps.Count; i++)
+		public static void Postfix(ListerBuildings __instance, Building b)
 		{
-			if (maps[i].listerBuildings == listerBuildings)
-				return maps[i].listerThings;
-		}
+			var def = b.def;
+			
+			if (def.building is { isNaturalRock: true })
+				return;
 
-		return GetListerThingsUsingTempMapFallback(listerBuildings);
+			var cache = __instance.Cache();
+			
+			if (b.Faction == Faction.OfPlayer)
+			{
+				cache.ColonistBuildingsByDef.GetOrAdd(def).Remove(b);
+				if (b is Building_ResearchBench researchBench)
+					cache.ColonistResearchBenches.Remove(researchBench);
+
+				cache.ColonistDeepScanners.Remove(b);
+
+				var buildingType = b.GetType();
+
+				do
+				{
+					if (buildingType == null)
+						break;
+
+					cache.ColonistBuildingsByType.GetOrAdd(buildingType).Remove(b);
+				}
+				while ((buildingType = buildingType.BaseType) != typeof(Building));
+			}
+			else
+			{
+				cache.NonColonistBuildingsByDef.GetOrAdd(def).Remove(b);
+			}
+		}
 	}
 
-	[MethodImpl(MethodImplOptions.NoInlining)]
-	private static ListerThings? GetListerThingsUsingTempMapFallback(ListerBuildings listerBuildings)
-		=> _tempMap!.listerBuildings == listerBuildings ? _tempMap.listerThings : null;
-
-	public static bool ContainsDefForColonists(ListerThings listerThings, ThingDef def)
+	public readonly record struct Cache
 	{
-		if (!listerThings.listsByDef.TryGetValue(def, out var things))
-			return false;
+		public readonly FishTable<ThingDef, IndexedFishSet<Building>>
+			ColonistBuildingsByDef = new(),
+			NonColonistBuildingsByDef = new();
 
-		var playerFaction = Faction.OfPlayerSilentFail;
-		for (var i = 0; i < things.Count; i++)
+		public readonly IndexedFishSet<Building_ResearchBench> ColonistResearchBenches = [];
+		
+		public readonly IndexedFishSet<Building> ColonistDeepScanners = [];
+
+		public readonly FishTable<Type, IList> ColonistBuildingsByType = new()
 		{
-			if (things[i].Faction == playerFaction)
-				return true;
-		}
+			ValueInitializer = static type
+				=> (IList)Activator.CreateInstance(typeof(IndexedFishSet<>).MakeGenericType(type))
+		};
 
-		return false;
+		public Cache()
+		{
+		}
 	}
 }

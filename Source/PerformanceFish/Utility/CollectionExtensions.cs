@@ -4,6 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using Mono.Collections.Generic;
 
 namespace PerformanceFish.Utility;
@@ -295,6 +296,8 @@ public static class CollectionExtensions
 
 		return ThrowForNoElements<T>();
 	}
+
+	public static List<T> AsOrToList<T>(this IEnumerable<T> enumerable) => enumerable as List<T> ?? enumerable.ToList();
 	
 	[DoesNotReturn]
 	private static T ThrowForNoElements<T>()

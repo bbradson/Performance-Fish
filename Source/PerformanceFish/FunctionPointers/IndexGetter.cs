@@ -68,14 +68,15 @@ public static class IndexGetter
 		Delegate func;
 		while (!_indexFuncs.TryGetValue(type, out func!))
 		{
-			type = type.BaseType
-				?? throw new($"Performance Fish failed to find a fallback method to handle type {
-					typeof(T).FullName} from mod {typeof(T).Assembly.GetName().Name}");
+			type = type?.BaseType
+				?? ThrowHelper.ThrowInvalidOperationException<Type>(
+					$"Performance Fish failed to find a fallback method to handle type {
+						typeof(T).FullName} from mod {typeof(T).Assembly.GetName().Name}");
 		}
 
 		if (!isThing)
 		{
-			Log.Message($"Found fallback of type {type.FullName}.{
+			Log.Message($"Found fallback of type {type?.FullName ?? "NULL"}.{
 				(!isDef ? " This likely means we can safely continue from here." : "")}");
 		}
 

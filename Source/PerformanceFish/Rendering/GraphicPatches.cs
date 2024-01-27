@@ -4,9 +4,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /*namespace PerformanceFish.Rendering;
-public class GraphicPatches : ClassWithFishPatches
+public sealed class GraphicPatches : ClassWithFishPatches
 {
-	public class DrawMeshInt_Patch : FishPatch
+	public sealed class DrawMeshInt_Patch : FishPatch
 	{
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.DeclaredMethod(typeof(Graphic), nameof(Graphic.DrawMeshInt));
@@ -17,7 +17,7 @@ public class GraphicPatches : ClassWithFishPatches
 		}
 	}
 
-	public class Shadow_DrawWorker_Patch : FishPatch
+	public sealed class Shadow_DrawWorker_Patch : FishPatch
 	{
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.DeclaredMethod(typeof(Graphic_Shadow), nameof(Graphic_Shadow.DrawWorker));

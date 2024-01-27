@@ -4,14 +4,15 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading.Tasks;
 
 namespace PerformanceFish.System;
 
-public class EqualityComparerOptimization : ClassWithFishPatches
+public sealed class EqualityComparerOptimization : ClassWithFishPatches
 {
-	public class Optimization : FishPatch
+	public sealed class Optimization : FishPatch
 	{
 		public override string? Description { get; }
 			= "Specialized EqualityComparers for slightly faster collection lookups on ValueTypes. Can reduce memory "
@@ -74,7 +75,7 @@ public class EqualityComparerOptimization : ClassWithFishPatches
 }
 
 [Serializable]
-public class EquatableValueTypeEqualityComparer<T> : EqualityComparer<T> where T : struct, IEquatable<T>
+public sealed class EquatableValueTypeEqualityComparer<T> : EqualityComparer<T> where T : struct, IEquatable<T>
 {
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override bool Equals(T x, T y) => x.Equals(y);
@@ -85,71 +86,73 @@ public class EquatableValueTypeEqualityComparer<T> : EqualityComparer<T> where T
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object obj) => obj is EquatableValueTypeEqualityComparer<T>;
+	public override bool Equals(object? obj) => obj is EquatableValueTypeEqualityComparer<T>;
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
 
 [Serializable]
-public class EquatableNullableEqualityComparer<T> : EqualityComparer<T?> where T : struct, IEquatable<T>
+public sealed class EquatableNullableEqualityComparer<T> : EqualityComparer<T?> where T : struct, IEquatable<T>
 {
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override bool Equals(T? x, T? y)
 		=> x.HasValue
-			? y.HasValue && x.Value.Equals(y.Value)
+			? y.HasValue && x.GetValueOrDefault().Equals(y.GetValueOrDefault())
 			: !y.HasValue;
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode(T? obj) => !obj.HasValue ? 0 : HashCode.Get(obj);
+	public override int GetHashCode(T? obj) => !obj.HasValue ? 0 : HashCode.Get(obj.GetValueOrDefault());
 
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object obj) => obj is EquatableNullableEqualityComparer<T>;
+	public override bool Equals(object? obj) => obj is EquatableNullableEqualityComparer<T>;
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
 
 [Serializable]
-public class NullableEqualityComparer<T> : EqualityComparer<T?> where T : struct
+public sealed class NullableEqualityComparer<T> : EqualityComparer<T?> where T : struct
 {
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override bool Equals(T? x, T? y)
 		=> x.HasValue
-			? y.HasValue && x.Value.Equals<T>(y.Value)
+			? y.HasValue && x.GetValueOrDefault().Equals<T>(y.GetValueOrDefault())
 			: !y.HasValue;
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode(T? obj) => !obj.HasValue ? 0 : HashCode.Get(obj);
+	public override int GetHashCode(T? obj) => !obj.HasValue ? 0 : HashCode.Get(obj.GetValueOrDefault());
 
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object obj) => obj is NullableEqualityComparer<T>;
+	public override bool Equals(object? obj) => obj is NullableEqualityComparer<T>;
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
 
 [Serializable]
-public class StringEqualityComparer : EqualityComparer<string>
+public sealed class StringEqualityComparer : EqualityComparer<string?>
 {
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override bool Equals(string x, string y)
+	[SuppressMessage("Globalization", "CA1307")]
+	[SuppressMessage("Globalization", "CA1309")]
+	public override bool Equals(string? x, string? y)
 		=> string.Equals(x, y); // already does a null check, so this skips the extra check that'd otherwise happen
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode(string obj) => obj.GetHashCode();
+	public override int GetHashCode(string? obj) => obj?.GetHashCode() ?? 0;
 
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object obj) => obj is StringEqualityComparer;
+	public override bool Equals(object? obj) => obj is StringEqualityComparer;
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
 
 [Serializable]
-public class IntEqualityComparer : EqualityComparer<int>
+public sealed class IntEqualityComparer : EqualityComparer<int>
 {
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override bool Equals(int x, int y) => x == y;
@@ -160,13 +163,13 @@ public class IntEqualityComparer : EqualityComparer<int>
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object obj) => obj is IntEqualityComparer;
+	public override bool Equals(object? obj) => obj is IntEqualityComparer;
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
 
 [Serializable]
-public class UshortEqualityComparer : EqualityComparer<ushort>
+public sealed class UshortEqualityComparer : EqualityComparer<ushort>
 {
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override bool Equals(ushort x, ushort y) => x == y;
@@ -177,13 +180,13 @@ public class UshortEqualityComparer : EqualityComparer<ushort>
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object obj) => obj is UshortEqualityComparer;
+	public override bool Equals(object? obj) => obj is UshortEqualityComparer;
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
 
 [Serializable]
-public class ReferenceEqualityComparer<T> : EqualityComparer<T>
+public sealed class ReferenceEqualityComparer<T> : EqualityComparer<T>
 {
 	public new static readonly ReferenceEqualityComparer<T> Default = new();
 
@@ -196,13 +199,13 @@ public class ReferenceEqualityComparer<T> : EqualityComparer<T>
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object obj) => obj is ReferenceEqualityComparer<T>;
+	public override bool Equals(object? obj) => obj is ReferenceEqualityComparer<T>;
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
 
 [Serializable]
-public class ValueTypeEqualityComparer<T> : EqualityComparer<T> where T : struct
+public sealed class ValueTypeEqualityComparer<T> : EqualityComparer<T> where T : struct
 {
 	public new static readonly ValueTypeEqualityComparer<T> Default = new();
 
@@ -215,7 +218,7 @@ public class ValueTypeEqualityComparer<T> : EqualityComparer<T> where T : struct
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object obj) => obj is ReferenceEqualityComparer<T>;
+	public override bool Equals(object? obj) => obj is ReferenceEqualityComparer<T>;
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }

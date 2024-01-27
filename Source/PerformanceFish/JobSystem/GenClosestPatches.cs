@@ -9,9 +9,9 @@ using Verse.AI;
 
 namespace PerformanceFish.JobSystem;
 
-public class GenClosestPatches : ClassWithFishPatches
+public sealed class GenClosestPatches : ClassWithFishPatches
 {
-	public class ClosestThing_Global_Patch : FishPatch
+	public sealed class ClosestThing_Global_Patch : FishPatch
 	{
 		public override string Description { get; } = "Threading for job scanning. Disabled and unstable.";
 		public override bool DefaultState => false;
@@ -224,31 +224,6 @@ public class GenClosestPatches : ClassWithFishPatches
 			public static AccessTools.FieldRef<T, Predicate<Thing>> Validator { get; }
 				= AccessTools.FieldRefAccess<T, Predicate<Thing>>("validator");
 		}
-	}
-#endif
-
-#if threadingEnabled
-	public class CanReach_Patch : FishPatch
-	{
-		protected CanReach_Patch() => FishSettings.ThreadingPatches.Add(this);
-		public override bool DefaultState => false;
-		public override string Description { get; }
-			= "Lock for threading. Only needed with threading enabled and off by default";
-		public override Expression<Action> TargetMethod { get; }
-			= static () => default(Reachability)!.CanReach(default, null, default, default);
-		public static void Prefix()
-		{
-			if (FishSettings.ThreadingEnabled)
-				Monitor.Enter(Lock);
-		}
-
-		public static Exception Finalizer(Exception __exception)
-		{
-			if (FishSettings.ThreadingEnabled)
-				Monitor.Exit(Lock);
-			return __exception;
-		}
-		private static object Lock { get; } = new();
 	}
 #endif
 //}

@@ -13,16 +13,22 @@ using PerformanceFish.Prepatching;
 namespace PerformanceFish;
 
 [PublicAPI]
-public class FishSettings : ModSettings
+public sealed class FishSettings : ModSettings
 {
 	public static bool SettingsLoaded { get; private set; }
-	
+
+	private const string VERSION_SCRIBE_LABEL = "Version";
+
 	public override void ExposeData()
 	{
 		base.ExposeData();
 
+		if (!TryScribeVersion())
+			goto DoneLoading;
+
 		Scribe_Values.Look(ref _threadingEnabled, "ThreadingEnabled");
 		Scribe_Values.Look(ref MothballEverything, "MothballEverything");
+		Scribe_Values.Look(ref ImproveHaulingAccuracy, "ImproveHaulingAccuracy", true);
 
 		if (PerformanceFishMod.AllPatchClasses is { } allPatchClasses)
 		{
@@ -36,7 +42,31 @@ public class FishSettings : ModSettings
 				patchClass.Patches.Scribe();
 		}
 
+	DoneLoading:
 		SettingsLoaded = true;
+	}
+
+	private static bool TryScribeVersion()
+	{
+		var currentVersion = PerformanceFishMod.LoadedVersion;
+		var lastSavedVersion = new Version().ToString();
+
+		var scribeMode = Scribe.mode;
+		if (scribeMode == LoadSaveMode.Saving)
+		{
+			lastSavedVersion = currentVersion.ToString();
+			Scribe_Values.Look(ref lastSavedVersion, VERSION_SCRIBE_LABEL);
+		}
+		else if (scribeMode == LoadSaveMode.LoadingVars)
+		{
+			var defaultVersion = lastSavedVersion;
+			Scribe_Values.Look(ref lastSavedVersion, VERSION_SCRIBE_LABEL);
+
+			if (new Version(lastSavedVersion ?? defaultVersion) < currentVersion)
+				return false;
+		}
+
+		return true;
 	}
 
 	public static void DoSettingsWindowContents(Rect inRect)
@@ -49,7 +79,7 @@ public class FishSettings : ModSettings
 		{
 			ResetAll();
 		}
-		
+
 		Widgets.BeginScrollView(inRect, ref _scrollPosition, _scrollRect);
 		var ls = new Listing_Standard();
 		ls.Begin(_scrollRect);
@@ -62,7 +92,7 @@ public class FishSettings : ModSettings
 			ModEnabled = checkModEnabled;
 			ToggleAllPatches(checkModEnabled);
 		}
-		
+
 		ls.Gap();
 		var curFontStyle = Text.CurFontStyle;
 		var curFontSize = curFontStyle.fontSize;
@@ -76,6 +106,9 @@ public class FishSettings : ModSettings
 		{
 			try
 			{
+				if (!patchClass.ShowSettings)
+					continue;
+				
 				ls.Label(patchClass.GetType().Name,
 					tooltip: patchClass is IHasDescription classWithDescription
 						? classWithDescription.Description
@@ -84,6 +117,9 @@ public class FishSettings : ModSettings
 				ls.GapLine(2f);
 				foreach (var patch in patchClass.Patches)
 				{
+					if (!patch.ShowSettings)
+						continue;
+
 					if (ShouldSkipForScrollView(inRect.height, Text.LineHeight, ls.curY, _scrollPosition.y))
 					{
 						ls.curY += Text.LineHeight;
@@ -91,14 +127,14 @@ public class FishSettings : ModSettings
 					}
 
 					var check = patch.Enabled;
-					if (patch.Description == null)
+					if (patch.DescriptionWithNotes == null)
 						Widgets.DrawHighlightIfMouseover(_scrollRect with { y = ls.curY, height = Text.LineHeight });
 					var label = patch.Name ?? patch.GetType().Name;
 					if (label.EndsWith("_Patch"))
 						label = label.Remove(label.Length - 6);
 					else if (label.EndsWith("Patch"))
 						label = label.Remove(label.Length - 5);
-					ls.CheckboxLabeled(label, ref check, patch.Description);
+					ls.CheckboxLabeled(label, ref check, patch.DescriptionWithNotes);
 					if (check != patch.Enabled)
 						patch.Enabled = check;
 				}
@@ -110,18 +146,21 @@ public class FishSettings : ModSettings
 				Log.Error($"{ex}");
 			}
 		}
-		
+
 		ls.Gap();
 		curFontStyle.fontSize = 20;
 		ls.Label("Prepatches");
 		curFontStyle.fontSize = curFontSize;
 		ls.GapLine();
 		ls.Gap();
-		
+
 		foreach (var patchClass in PerformanceFishMod.AllPrepatchClasses!)
 		{
 			try
 			{
+				if (!patchClass.ShowSettings)
+					continue;
+				
 				ls.Label(patchClass.GetType().Name,
 					// ReSharper disable once SuspiciousTypeConversion.Global
 					tooltip: patchClass is IHasDescription classWithDescription
@@ -131,6 +170,9 @@ public class FishSettings : ModSettings
 				ls.GapLine(2f);
 				foreach (var patch in patchClass.Patches)
 				{
+					if (!patch.ShowSettings)
+						continue;
+
 					if (ShouldSkipForScrollView(inRect.height, Text.LineHeight, ls.curY, _scrollPosition.y))
 					{
 						ls.curY += Text.LineHeight;
@@ -138,14 +180,14 @@ public class FishSettings : ModSettings
 					}
 
 					var check = patch.Enabled;
-					if (patch.Description == null)
+					if (patch.DescriptionWithNotes == null)
 						Widgets.DrawHighlightIfMouseover(_scrollRect with { y = ls.curY, height = Text.LineHeight });
 					var label = patch.Name ?? patch.GetType().Name;
 					if (label.EndsWith("_Patch"))
 						label = label.Remove(label.Length - 6);
 					else if (label.EndsWith("Patch"))
 						label = label.Remove(label.Length - 5);
-					ls.CheckboxLabeled(label, ref check, patch.Description);
+					ls.CheckboxLabeled(label, ref check, patch.DescriptionWithNotes);
 					if (check != patch.Enabled)
 						patch.Enabled = check;
 				}
@@ -157,10 +199,12 @@ public class FishSettings : ModSettings
 				Log.Error($"{ex}");
 			}
 		}
-		
+
+		ls.Gap();
+		ls.CheckboxLabeled("Improve hauling accuracy", ref ImproveHaulingAccuracy, ImproveHaulingAccuracyDescription);
 		ls.Gap();
 		ls.CheckboxLabeled("Mothball everything", ref MothballEverything, MothballEverythingDescription);
-		
+
 		ls.Gap();
 
 		if (ls.ButtonText("Log hediffs affected by mothball optimization"))
@@ -168,12 +212,12 @@ public class FishSettings : ModSettings
 			Log.Message($"Allowed defs for mothballing: {MothballOptimization.AllowedDefs.ToStringSafeEnumerable()}");
 			Log.Message($"Blocking defs for mothballing: {DefDatabase<HediffDef>.AllDefsListForReading.Where(static def
 				=> !MothballOptimization.AllowedDefs.Contains(def)).ToStringSafeEnumerable()}");
-			
+
 			Verse.Log.TryOpenLogWindow();
 		}
 
 		ls.Gap();
-		
+
 		if (ls.ButtonText("Log patch count"))
 		{
 			PerformanceFishMod.LogPatchCount();
@@ -181,7 +225,7 @@ public class FishSettings : ModSettings
 		}
 
 		ls.Gap();
-		
+
 		if (ls.ButtonText("Log cache utilization"))
 		{
 			Cache.Utility.LogCurrentCacheUtilization();
@@ -201,10 +245,16 @@ public class FishSettings : ModSettings
 		};
 	}
 
-	public static string MothballEverythingDescription
-		= MothballOptimization.BASIC_DESCRIPTION + " This setting removes all conditions, enabling every world "
-		+ "pawn for mothballing. Note, health conditions do not progress on mothballed pawns. Requires the "
-		+ "WorldPawnsDefPreventingMothball patch to apply";
+	public static string
+		MothballEverythingDescription
+			= MothballOptimization.BASIC_DESCRIPTION
+			+ " This setting removes all conditions, enabling every world "
+			+ "pawn for mothballing. Note, health conditions do not progress on mothballed pawns. Requires the "
+			+ "WorldPawnsDefPreventingMothball patch to apply",
+		ImproveHaulingAccuracyDescription
+			= "Requires the StoreUtilityPrepatches:TryFindBestBetterStoreCellForWorker patch to function. Having this "
+			+ "enabled makes hauling lookups more thorough, raising the odds of getting closer haul destinations at "
+			+ "the cost of a usually minor performance hit";
 
 	private static void ToggleAllPatches(bool newState) => ToggleAllPatches(_ => newState, _ => newState);
 
@@ -214,15 +264,21 @@ public class FishSettings : ModSettings
 		foreach (var patchClass in PerformanceFishMod.AllPatchClasses!)
 		{
 			foreach (var patch in patchClass.Patches)
-				patch.Enabled = fishPatchFunc(patch);
+			{
+				if (patch.ShowSettings)
+					patch.Enabled = fishPatchFunc(patch);
+			}
 		}
 
 		foreach (var patchClass in PerformanceFishMod.AllPrepatchClasses!)
 		{
 			foreach (var patch in patchClass.Patches)
-				patch.Enabled = fishPrepatchFunc(patch);
+			{
+				if (patch.ShowSettings)
+					patch.Enabled = fishPrepatchFunc(patch);
+			}
 		}
-		
+
 		Cache.Utility.Clear();
 	}
 
@@ -259,7 +315,9 @@ public class FishSettings : ModSettings
 
 	private static bool _modEnabled = true;
 
-	public static bool MothballEverything;
+	public static bool
+		MothballEverything,
+		ImproveHaulingAccuracy = true;
 
 	public static bool ThreadingEnabled
 	{
@@ -275,7 +333,7 @@ public class FishSettings : ModSettings
 	}
 
 	private static bool _threadingEnabled;
-	public static List<FishPatch> ThreadingPatches { get; } = new();
+	public static List<FishPatch> ThreadingPatches { get; } = [];
 	private static Rect _scrollRect = new(0f, 0f, 500f, 9001f);
 	private static Vector2 _scrollPosition;
 

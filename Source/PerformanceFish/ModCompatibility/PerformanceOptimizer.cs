@@ -20,10 +20,10 @@ public static class PerformanceOptimizer
 
 	public static string[] BlockedPatchNames { get; }
 		=
-		{
+		[
 			"PerformanceOptimizer.Optimization_FasterGetCompReplacement",
 			"PerformanceOptimizer.Optimization_IdeoUtility_GetStyleDominance"
-		};
+		];
 
 	static PerformanceOptimizer()
 	{

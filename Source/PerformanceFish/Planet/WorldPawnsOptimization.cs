@@ -10,9 +10,9 @@ using RimWorld.Planet;
 
 namespace PerformanceFish.Planet;
 
-public class WorldPawnsOptimization : ClassWithFishPrepatches
+public sealed class WorldPawnsOptimization : ClassWithFishPrepatches
 {
-	public class AllPawnsAlivePatch : FishPrepatch
+	public sealed class AllPawnsAlivePatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Minor optimization to reduce the amount of copying happening in the WorldPawns.AllPawnsAlive method";
@@ -52,7 +52,7 @@ public class WorldPawnsOptimization : ClassWithFishPrepatches
 				|| instance.pawnsMothballed._version != cache.PawnsMothballedVersion;
 	}
 	
-	public class AllPawnsAliveOrDeadPatch : FishPrepatch
+	public sealed class AllPawnsAliveOrDeadPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Minor optimization to reduce the amount of copying happening in the WorldPawns.AllPawnsAliveOrDead "

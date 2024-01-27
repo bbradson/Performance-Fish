@@ -7,15 +7,15 @@ using PerformanceFish.ModCompatibility;
 
 namespace PerformanceFish.JobSystem;
 
-public class WorkGiver_HaulOptimization : ClassWithFishPatches
+public sealed class WorkGiver_HaulOptimization : ClassWithFishPatches
 {
-	public class PotentialWorkThingsGlobal_Patch : FishPatch
+	public sealed class PotentialWorkThingsGlobal_Patch : FishPatch
 	{
-		public override bool Enabled => base.Enabled && !ActiveMods.Multiplayer;
-
+		public override List<string> IncompatibleModIDs { get; } = [PackageIDs.MULTIPLAYER];
+		
 		public override string Description { get; }
 			= "Sorts haulables by distance before running expensive hauling calculations on them to avoid checks on "
-				+ "far away items";
+			+ "far away items";
 
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.Method(typeof(WorkGiver_Haul), nameof(WorkGiver_Haul.PotentialWorkThingsGlobal));

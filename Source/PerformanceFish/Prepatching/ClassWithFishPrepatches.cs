@@ -13,7 +13,22 @@ namespace PerformanceFish.Prepatching;
 public abstract class ClassWithFishPrepatches : SingletonFactory<ClassWithFishPrepatches>
 {
 	public virtual FishPrepatchHolder Patches { get; }
-	public virtual bool RequiresLoadedGameForPatching => false;
+
+	public virtual bool ShowSettings
+	{
+		get
+		{
+			foreach (var patch in Patches)
+			{
+				if (patch.ShowSettings)
+					return true;
+			}
+
+			return false;
+		}
+	}
+	
+	public virtual bool Enabled => true;
 
 	protected ClassWithFishPrepatches() => Patches = new(GetType());
 }

@@ -8,7 +8,7 @@ using PerformanceFish.Prepatching;
 
 namespace PerformanceFish.Hediffs;
 
-public class HealthTrackerOptimization : ClassWithFishPrepatches
+public sealed class HealthTrackerOptimization : ClassWithFishPrepatches
 {
 	public static void Initialize()
 	{
@@ -24,7 +24,7 @@ public class HealthTrackerOptimization : ClassWithFishPrepatches
 		}
 	}
 	
-	public class HealthTickPatch : FishPrepatch
+	public sealed class HealthTickPatch : FishPrepatch
 	{
 		public override MethodBase TargetMethodBase { get; }
 			= AccessTools.Method(typeof(Pawn_HealthTracker), nameof(Pawn_HealthTracker.HealthTick));

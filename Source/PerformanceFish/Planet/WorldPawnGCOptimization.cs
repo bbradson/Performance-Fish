@@ -5,14 +5,15 @@
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
+using PerformanceFish.ModCompatibility;
 using PerformanceFish.Prepatching;
 using RimWorld.Planet;
 
 namespace PerformanceFish.Planet;
 
-public class WorldPawnGCOptimization : ClassWithFishPrepatches
+public sealed class WorldPawnGCOptimization : ClassWithFishPrepatches
 {
-	public class AddRelationshipsPatch : FishPrepatch
+	public sealed class AddRelationshipsPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "The world pawn GC is responsible for deleting no longer relevant pawns. AddAllRelationships here tries "
@@ -29,8 +30,10 @@ public class WorldPawnGCOptimization : ClassWithFishPrepatches
 			=> AcceptedCriticalPawnReasons.Contains(keptPawns[pawn]);
 	}
 
-	public class WorldPawnGCTickPatch : FishPrepatch
+	public sealed class WorldPawnGCTickPatch : FishPrepatch
 	{
+		public override List<string> IncompatibleModIDs { get; } = [PackageIDs.MULTIPLAYER];
+
 		public override string? Description { get; }
 			= "Normally the world pawn GC processes 1 pawn per tick, and speeds up if it fails to complete its "
 			+ "processing before the game had to add or remove world pawns through other means. This patch changes the "
@@ -42,7 +45,7 @@ public class WorldPawnGCOptimization : ClassWithFishPrepatches
 		public static bool Prefix() => TickHelper.MatchesModulo(4);
 	}
 
-	public class CancelGCPassPatch : FishPrepatch
+	public sealed class CancelGCPassPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "When the game determines that it has to speed up its GC process because of world pawn additions or "
@@ -67,7 +70,7 @@ public class WorldPawnGCOptimization : ClassWithFishPrepatches
 		}
 	}
 
-	public class GetCriticalPawnReasonPatch : FishPrepatch
+	public sealed class GetCriticalPawnReasonPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Critical pawns are pawns the game's world pawn GC does not delete. Relationships other than parents of "
@@ -102,5 +105,5 @@ public class WorldPawnGCOptimization : ClassWithFishPrepatches
 	}
 
 	public static HashSet<string> AcceptedCriticalPawnReasons
-		= new(new[] { "Colonist", "Generating", "Kidnapped", "CaravanMember", "TransportPod", "Spawned" });
+		= [..new[] { "Colonist", "Generating", "Kidnapped", "CaravanMember", "TransportPod", "Spawned" }];
 }

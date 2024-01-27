@@ -134,7 +134,7 @@ public static class ByReferenceUnclearable<T, TResult>
 			Log.Error($"{e}");
 		}
 
-		return result ?? throw new();
+		return result ?? ThrowHelper.ThrowInvalidOperationException<TCacheResult>();
 	}
 
 	[SecuritySafeCritical]
@@ -153,6 +153,7 @@ public static class ByReferenceUnclearable<T, TResult>
 				cacheCopy.Task = null;
 			}
 			// ReSharper disable once SuspiciousTypeConversion.Global
+			// ReSharper disable once PatternNeverMatches
 			else if (centralCache.Task is Countdown taskCountdown)
 			{
 				Interlocked.Decrement(ref taskCountdown.Value);
@@ -216,7 +217,7 @@ public static class ByReferenceUnclearable<T, TResult>
 			Log.Error($"{e}");
 		}
 
-		return result ?? throw new();
+		return result ?? ThrowHelper.ThrowInvalidOperationException<TCacheResult>();
 	}
 
 	public static unsafe void Initialize()
@@ -239,17 +240,39 @@ public static class ByReferenceUnclearable<T, TResult>
 public static class ByReference<T, TResult>
 	where T : notnull where TResult : new()
 {
+	private static object _valueInitializerLock = new();
+	
 	public static object SyncLock = new();
 	
-	private static FishTable<T, TResult> _get = Utility.AddNew<T, TResult>();
+	private static FishTable<T, TResult> _get = InitializeNew();
 
 	[ThreadStatic]
 	private static FishTable<T, TResult>? _getThreadStatic;
 
+	private static Func<T, TResult>? _valueInitializer;
+	
+	public static Func<T, TResult>? ValueInitializer
+	{
+		get
+		{
+			lock (_valueInitializerLock)
+				return _valueInitializer;
+		}
+		set
+		{
+			lock (_valueInitializerLock)
+			{
+				value ??= static _ => Reflection.New<TResult>();
+				_valueInitializer = value;
+				_get.ValueInitializer = value;
+			}
+		}
+	}
+
 	public static FishTable<T, TResult> Get
 	{
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		get => _getThreadStatic ??= Utility.AddNew<T, TResult>();
+		get => _getThreadStatic ??= InitializeNew();
 	}
 
 	public static FishTable<T, TResult> GetDirectly
@@ -259,6 +282,12 @@ public static class ByReference<T, TResult>
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static TResult GetOrAdd(T key) => Get.GetOrAdd(key);
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static TResult GetOrAdd(ref T key) => Get.GetOrAdd(ref key);
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static ref TResult GetOrAddReference(T key) => ref Get.GetOrAddReference(key);
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -266,6 +295,12 @@ public static class ByReference<T, TResult>
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static ref TResult GetExistingReference(T key) => ref Get.GetReference(key);
+
+	public static void Remove(T key)
+	{
+		Get.Remove(key);
+		GetDirectly.Remove(key);
+	}
 	
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static void Update<VResult>(T key) where VResult : TResult, ICacheable<T>
@@ -355,7 +390,7 @@ public static class ByReference<T, TResult>
 			Log.Error($"{e}");
 		}
 
-		return result ?? throw new();
+		return result ?? ThrowHelper.ThrowInvalidOperationException<TCacheResult>();
 	}
 
 	public static Task<TCacheResult> RequestFromCacheAsync<TCacheValue, TArgument2, TCacheResult>(T key, TArgument2 second)
@@ -406,7 +441,7 @@ public static class ByReference<T, TResult>
 			Log.Error($"{e}");
 		}
 
-		return result ?? throw new();
+		return result ?? ThrowHelper.ThrowInvalidOperationException<TCacheResult>();
 	}
 
 	public static unsafe void Initialize()
@@ -423,6 +458,9 @@ public static class ByReference<T, TResult>
 					typeof(ByReference<T, TResult>).FullName}\n{ex}");
 		}
 	}
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static FishTable<T, TResult> InitializeNew() => Utility.AddNew(ValueInitializer);
 }
 
 [PublicAPI]
@@ -528,6 +566,7 @@ public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	// ReSharper disable once ConvertToPrimaryConstructor
 	public ByReference(T1 first, T2 second)
 	{
 		First = first;

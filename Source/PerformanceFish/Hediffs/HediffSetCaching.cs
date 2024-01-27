@@ -18,9 +18,9 @@ using NotMissingPartsCache
 
 namespace PerformanceFish.Hediffs;
 
-public class HediffSetPrecaching : ClassWithFishPrepatches
+public sealed class HediffSetPrecaching : ClassWithFishPrepatches
 {
-	public class GetFirstHediffOfDef : FishPrepatch
+	public sealed class GetFirstHediffOfDef : FishPrepatch
 	{
 		public override string Description { get; }
 			= "Caches results of the HediffSet.GetFirstHediffOfDef method. Impact scales with hediff count.";
@@ -94,7 +94,7 @@ public class HediffSetPrecaching : ClassWithFishPrepatches
 		}
 	}
 
-	public class HasHediff : FishPrepatch
+	public sealed class HasHediff : FishPrepatch
 	{
 		public override string Description { get; }
 			= "Caches results of the HediffSet.HasHediff method. Impact scales with hediff count.";
@@ -111,7 +111,7 @@ public class HediffSetPrecaching : ClassWithFishPrepatches
 			=> __instance.GetFirstHediffOfDef(def, mustBeVisible) != null;
 	}
 	
-	public class GetNotMissingParts : FishPrepatch
+	public sealed class GetNotMissingParts : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Caches results of the HediffSet.GetNotMissingParts method. Impact scales with hediff count.";
@@ -156,9 +156,9 @@ public class HediffSetPrecaching : ClassWithFishPrepatches
 	}
 }
 
-public class HediffSetCaching : ClassWithFishPatches
+public sealed class HediffSetCaching : ClassWithFishPatches
 {
-	public class DirtyCache : FishPatch
+	public sealed class DirtyCache : FishPatch
 	{
 		public override string Description { get; }
 			= "Patched to trigger psylink cache clearing for the psychic entropy optimization.";
@@ -176,9 +176,9 @@ public class HediffSetCaching : ClassWithFishPatches
 	public record struct NotMissingPartsCacheValue
 	{
 		private int _version = -1;
-		private List<Hediff> _hediffsInSet = new();
+		private List<Hediff> _hediffsInSet = [];
 		private int _nextRefreshTick;
-		public List<BodyPartRecord> Parts = new();
+		public List<BodyPartRecord> Parts = [];
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public void Update(HediffSet set, ref IEnumerable<BodyPartRecord> result)
@@ -209,7 +209,7 @@ public class HediffSetCaching : ClassWithFishPatches
 	public record struct HediffCacheValue
 	{
 		private int _version = -1;
-		private List<Hediff> _hediffsInSet = new();
+		private List<Hediff> _hediffsInSet = [];
 		private int _nextRefreshTick;
 		public Hediff? Hediff;
 

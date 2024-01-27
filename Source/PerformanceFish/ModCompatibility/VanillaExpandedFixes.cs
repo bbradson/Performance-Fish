@@ -3,18 +3,20 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+#if fixed // with commit from Jul 3, 2023
+
 namespace PerformanceFish.ModCompatibility;
 
-public class VanillaExpandedFixes : ClassWithFishPatches
+public sealed class VanillaExpandedFixes : ClassWithFishPatches
 {
-	public class ExpandableGraphicData : FishPatch
+	public sealed class ExpandableGraphicData : FishPatch
 	{
 		public override string? Description { get; }
 			= "Fixes the LoadAllFiles method in Vanilla Expanded Framework's ExpandableGraphicData to not scan through "
 			+ "all texture folders of all mods for every graphic and instead just use cached files the game already "
 			+ "loaded. Improves load times and prevents dds related errors.";
 
-		public override bool Enabled => ActiveMods.VanillaExpandedFramework;
+		public override bool Enabled => ActiveMods.VanillaExpandedFramework && base.Enabled;
 
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.Method("VFECore.ExpandableGraphicData:LoadAllFiles");
@@ -27,16 +29,14 @@ public class VanillaExpandedFixes : ClassWithFishPatches
 			var paths = new List<string>();
 			var mods = LoadedModManager.RunningModsListForReading;
 			var count = mods.Count;
+
+			var prefix = !folderPath.NullOrEmpty() && folderPath![^1] == '/'
+				? folderPath
+				: folderPath + '/';
 			
 			for (var i = 0; i < count; i++)
 			{
-				var contentListTrie = mods[i].GetContentHolder<Texture2D>().contentListTrie;
-
-				var prefix = !folderPath.NullOrEmpty() && folderPath![^1] == '/'
-					? folderPath
-					: folderPath + '/';
-
-				foreach (var path in contentListTrie.GetByPrefix(prefix))
+				foreach (var path in mods[i].GetContentHolder<Texture2D>().contentListTrie.GetByPrefix(prefix))
 					paths.Add(path);
 			}
 
@@ -44,3 +44,5 @@ public class VanillaExpandedFixes : ClassWithFishPatches
 		}
 	}
 }
+
+#endif

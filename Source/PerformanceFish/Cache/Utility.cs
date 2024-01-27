@@ -5,16 +5,16 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using System.Reflection.Emit;
 using JetBrains.Annotations;
+using PerformanceFish.Events;
 
 namespace PerformanceFish.Cache;
 
 public static class Utility
 {
-	public static event Action<Thing>? ThingDestroyed; // TODO
-
 	public static event Action? Cleared;
 
 	private static volatile int _destroyedThingCounter, _lastGCTick, _gcRate = 1000;
@@ -24,11 +24,21 @@ public static class Utility
 	private static ICollection[]? _cachesToProcessForGC;
 
 	private static object _gcLock = new();
+	
+	public static ConcurrentBag<ICollection> All { get; } = [];
 
-	public static void NotifyThingDestroyed(Thing thing)
+	public static void Clear()
 	{
-		ThingDestroyed?.Invoke(thing);
+		foreach (var cache in All)
+			cache.Clear();
+		
+		Cleared?.Invoke();
+	}
 
+	internal static void Initialize() => ThingEvents.Destroyed += TryContinueGC;
+
+	public static void TryContinueGC(Thing thing)
+	{
 		if (Interlocked.Increment(ref _destroyedThingCounter) < 100
 			|| Current.programStateInt != ProgramState.Playing
 			|| TickHelper.TicksGame - _lastGCTick < _gcRate)
@@ -77,48 +87,59 @@ public static class Utility
 		var count = 0;
 		for (var i = collection.Length; i-- > 0;)
 		{
-			if (collection.Length > 0)
+			if (collection[i].Count > 0)
 				count++;
 		}
 
 		return count;
 	}
 
-	public static ConcurrentBag<ICollection> All { get; } = new();
-
-	public static void Clear()
-	{
-		foreach (var cache in All)
-			cache.Clear();
-		
-		Cleared?.Invoke();
-	}
-
 	public static void LogCurrentCacheUtilization()
 	{
-		var allCaches = All.ToArray();
-		Log.Message($"Total utilized caches: {allCaches.CountNonEmpty()}\n\n"
-			+ $"Individual counts:\n{string.Join("\n",
-				allCaches.Select(static cache => cache.GetType()).Distinct().Select(type
-					=> $"{type.FullDescription()} :: {allCaches.Where(cache => cache.GetType() == type)
-						.Select(static cache => cache.Count).Sum()}{TryCalculateSize(
-						type, allCaches)}"))}\n=============================================================");
+		var allCaches = All.Where(static c => c.Count > 0).ToArray();
+		var allCacheTypes = allCaches.Select(static cache => cache.GetType()).Distinct();
+		var cacheData = allCacheTypes.Select(type
+			=>
+		{
+			var cachesOfType = allCaches.Where(cache => cache.GetType() == type).ToList();
+			return (type, cachesOfType.Select(static cache => cache.Count).Sum(),
+				TryCalculateSize(type, cachesOfType));
+		}).ToArray();
+		
+		Array.Sort(cacheData, static (x, y)
+			=> y.Item3 is { } size ? size.CompareTo(x.Item3 ?? 0L)
+				: y.Item2 != x.Item2 ? y.Item2.CompareTo(x.Item2)
+			: string.Compare(x.Item1.ToString(), y.Item1.ToString(), StringComparison.Ordinal));
+
+		Log.Message($"Total utilized caches: {allCaches.Length} ({
+			ToByteString(cacheData.Select(static tuple => tuple.Item3 ?? 0L).Sum())})\n\n"
+			+ $"Individual counts:\n{string.Join("\n", cacheData.Select(static tuple
+				=> $"{tuple.Item1.FullDescription()} :: {tuple.Item2.ToStringCached()}{
+					(tuple.Item3 is { } size ? $" ({ToByteString(size)})"
+						: "")}"))}\n=============================================================");
 	}
 
-	private static string TryCalculateSize(Type type, ICollection[] allCaches)
-		=> (type.GetProperty(nameof(FishTable<object, object>.SizeEstimate))?.GetMethod
+	private static long? TryCalculateSize(Type type, IEnumerable<ICollection> cachesOfType)
+	{
+		var sizeGetter = type.GetProperty(nameof(FishTable<object, object>.SizeEstimate))?.GetMethod
 			?? (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>)
 				? AccessTools.Method(typeof(FisheryLib.CollectionExtensions),
 					nameof(FisheryLib.CollectionExtensions.GetSizeEstimate), generics: type.GetGenericArguments())
-				: null)) is { } sizeGetter
-			? $" ({(allCaches.Where(cache => cache.GetType() == type)
-						.Select(cache => (long)(uint)sizeGetter.Invoke(sizeGetter.IsStatic ? null : cache,
-							sizeGetter.IsStatic ? new object[] { cache } : null)).Sum()
-					is var sizeInBytes
-				&& sizeInBytes > 1024L * 1024L ? $"{Math.Round(sizeInBytes / (1024d * 1024d), 2)} MiB"
-				: sizeInBytes > 1024L ? $"{Math.Round(sizeInBytes / 1024d, 2)} KiB"
-				: $"{sizeInBytes} B")})"
-			: "";
+				: null);
+
+		return sizeGetter is null
+			? null
+			: cachesOfType.Select(cache
+				=> (long)(uint)sizeGetter.Invoke(sizeGetter.IsStatic ? null : cache,
+					sizeGetter.IsStatic ? [cache] : null)).Sum();
+	}
+
+	private static string ToByteString(long sizeInBytes)
+		=> sizeInBytes > 1024L * 1024L
+			? $"{Math.Round(sizeInBytes / (1024d * 1024d), 2).ToString(CultureInfo.CurrentCulture)} MiB"
+			: sizeInBytes > 1024L
+				? $"{Math.Round(sizeInBytes / 1024d, 2).ToString(CultureInfo.CurrentCulture)} KiB"
+				: $"{((int)sizeInBytes).ToStringCached()} B";
 
 	private static void Clear(this ICollection cache)
 	{
@@ -167,17 +188,52 @@ public static class Utility
 	}
 
 	[MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
-	public static FishTable<TKey, TValue> AddNew<TKey, TValue>(Action<KeyValuePair<TKey, TValue>>? onEntryAdded = null,
+	public static FishTable<TKey, TValue> AddNew<TKey, TValue>(Func<TKey, TValue>? valueInitializer = null,
+		Action<KeyValuePair<TKey, TValue>>? onEntryAdded = null,
 		Action<KeyValuePair<TKey, TValue>>? onEntryRemoved = null)
 	{
 		var newCollection = new FishTable<TKey, TValue>();
+
+		if (valueInitializer != null)
+			newCollection.ValueInitializer = valueInitializer;
 		
 		if (onEntryAdded != null)
 			newCollection.EntryAdded += onEntryAdded;
 
+		if (typeof(TKey).IsAssignableTo(typeof(Thing)))
+		{
+			newCollection.EntryAdded
+				+= entry =>
+				{
+					var data = new OnDestroyActionData<TKey, TValue>(entry.Key, newCollection);
+					data.Action = data.Invoke;
+					data.Thing.Events().Destroyed += data.Action;
+				};
+		}
+
 		if (onEntryRemoved != null)
 			newCollection.EntryRemoved += onEntryRemoved;
 		
+		All.Add(newCollection);
+		return newCollection;
+	}
+
+	private sealed record OnDestroyActionData<TKey, TValue>(TKey Key, FishTable<TKey, TValue> Collection)
+	{
+		public Action<Thing>? Action;
+		public Thing Thing => Unsafe.As<Thing>(Key);
+
+		public void Invoke(Thing thing)
+		{
+			Collection.Remove(Key);
+			Thing.Events().Destroyed -= Action;
+		}
+	}
+
+	[MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
+	public static FishTable<TKey, TValue> AddNew<TKey, TValue>(Func<FishTable<TKey, TValue>> collectionInitializer)
+	{
+		var newCollection = collectionInitializer();
 		All.Add(newCollection);
 		return newCollection;
 	}
@@ -229,48 +285,13 @@ public interface IClearable
 	public void Clear();
 }
 
-public interface IFishBool
-{
-	public bool Value
-	{
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		get;
-	}
-}
-
-public struct FishBool : IFishBool
-{
-	private byte _value;
-
-	public bool Value
-	{
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		get => _value == 1;
-		
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		set => _value = value ? (byte)1 : (byte)0;
-	}
-	
-	public struct True : IFishBool
-	{
-		public bool Value => true;
-	}
-
-	public struct False : IFishBool
-	{
-		public bool Value => false;
-	}
-}
-
 [PublicAPI]
-public class CollectionRef<T> : IClearable, ICollection where T : ICollection
+public sealed class CollectionRef<T>(AccessTools.FieldRef<T> fieldRef) : IClearable, ICollection
+	where T : ICollection
 {
-	private readonly AccessTools.FieldRef<T> _fieldRef;
 	private static readonly ClearInvoker? _clearInvoker = CreateClearDelegate();
 
-	public CollectionRef(AccessTools.FieldRef<T> fieldRef) => _fieldRef = fieldRef;
-
-	public ref T Get => ref _fieldRef();
+	public ref T Get => ref fieldRef();
 
 	public void Create() => Get = Reflection.New<T>();
 
@@ -304,7 +325,7 @@ public class CollectionRef<T> : IClearable, ICollection where T : ICollection
 			return null;
 		
 		var dm = new DynamicMethod($"ClearInvoker_{typeof(T).FullName}", null,
-			new[] { typeof(T).MakeByRefType() }, typeof(CollectionRef<T>), true);
+			[typeof(T).MakeByRefType()], typeof(CollectionRef<T>), true);
 		var il = dm.GetILGenerator();
 		
 		il.Emit(FishTranspiler.Argument(0));

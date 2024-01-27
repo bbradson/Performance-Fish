@@ -29,9 +29,9 @@ public static class ByMap<T> where T : new()
 	private static Func<Map, T> Initialize { get; }
 		= typeof(MapComponent).IsAssignableFrom(typeof(T))
 			? AccessTools.MethodDelegate<Func<Map, T>>(AccessTools.Method(typeof(Map), nameof(Map.GetComponent),
-				Type.EmptyTypes, new[] { typeof(T) }))
+				Type.EmptyTypes, [typeof(T)]))
 			// missing T constraints cause the compiler to complain when trying to just use map => map.GetComponent<T>
-			: static _ => new();
+			: static _ => Reflection.New<T>();
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static T GetFor(Map map)
@@ -39,7 +39,7 @@ public static class ByMap<T> where T : new()
 		var cache = GetCache;
 		for (var i = 0; i < cache.Count; i++)
 		{
-			ref var cacheEntry = ref cache.GetReferenceUnverifiable(i);
+			ref var cacheEntry = ref cache.GetReferenceUnsafe(i);
 			if (cacheEntry.map == map)
 				return cacheEntry.value;
 
@@ -59,7 +59,7 @@ public static class ByMap<T> where T : new()
 		var cache = GetCache;
 		for (var i = 0; i < cache.Count; i++)
 		{
-			ref var cacheEntry = ref cache.GetReferenceUnverifiable(i);
+			ref var cacheEntry = ref cache.GetReferenceUnsafe(i);
 			if (cacheEntry.map == map)
 				return ref cacheEntry.value;
 
@@ -74,7 +74,10 @@ public static class ByMap<T> where T : new()
 	}
 
 	private static bool EntryValid(int i, Map map)
-		=> Find.Maps.Count > i && Find.Maps.Contains(map);
+	{
+		var maps = Current.Game.Maps;
+		return maps.Count > i && maps.Contains(map);
+	}
 
 	private static T AddEntry(Map map, List<(Map map, T value)> cache)
 	{
@@ -85,6 +88,6 @@ public static class ByMap<T> where T : new()
 	private static ref T AddEntryByRef(Map map, List<(Map map, T value)> cache)
 	{
 		cache.Add((map, Initialize(map)));
-		return ref cache.GetReferenceUnverifiable(cache.Count - 1).value;
+		return ref cache.GetReferenceUnsafe(cache.Count - 1).value;
 	}
 }

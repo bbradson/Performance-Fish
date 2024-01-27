@@ -9,9 +9,9 @@ using InventoryMassCache
 
 namespace PerformanceFish;
 
-public class MassUtilityCaching : ClassWithFishPatches
+public sealed class MassUtilityCaching : ClassWithFishPatches
 {
-	public class GearMass_Patch : FirstPriorityFishPatch
+	public sealed class GearMass_Patch : FirstPriorityFishPatch
 	{
 		public override string Description { get; } = "Caches pawn gear mass. Hauling jobs check this quite a lot";
 		public override Delegate TargetMethodGroup { get; } = MassUtility.GearMass;
@@ -41,7 +41,7 @@ public class MassUtilityCaching : ClassWithFishPatches
 			=> GearMassCache.GetExistingReference(p).Update(__result, p);
 	}
 
-	public class InventoryMass_Patch : FirstPriorityFishPatch
+	public sealed class InventoryMass_Patch : FirstPriorityFishPatch
 	{
 		public override string Description { get; } = "Caches pawn inventory mass. Hauling jobs check this quite a lot";
 		public override Delegate TargetMethodGroup { get; } = MassUtility.InventoryMass;

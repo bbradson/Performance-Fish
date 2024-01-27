@@ -7,13 +7,13 @@ using Verse.AI;
 
 namespace PerformanceFish.JobSystem;
 
-public class WorkGiver_MergeOptimization : ClassWithFishPatches
+public sealed class WorkGiver_MergeOptimization : ClassWithFishPatches
 {
-	public class JobOnThing_Patch : FishPatch
+	public sealed class JobOnThing_Patch : FishPatch
 	{
 		public override string Description { get; }
 			= "Removes mergeables from ListerMergeables if they no longer qualify as mergeable when trying to check "
-				+ "for a merging job on them. Vanilla RimWorld just fails and keeps them in";
+			+ "for a merging job on them. Vanilla RimWorld just fails and keeps them in";
 
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.Method(typeof(WorkGiver_Merge), nameof(WorkGiver_Merge.JobOnThing));
@@ -23,14 +23,16 @@ public class WorkGiver_MergeOptimization : ClassWithFishPatches
 			if (t.GetSlotGroup() is not null)
 				return true;
 
-			RemoveFromListerMergeables(t);
+			TryRemoveFromListerMergeables(t);
 			__result = null;
 			return false;
 		}
 
-		private static void RemoveFromListerMergeables(Thing t)
+		private static void TryRemoveFromListerMergeables(Thing t)
 		{
-			var map = t.MapHeld;
+			if (t.TryGetMapHeld() is not { } map)
+				return;
+			
 			map.listerMergeables.TryRemove(t);
 			map.listerHaulables.Check(t);
 		}

@@ -4,11 +4,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 extern alias nuget;
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Security;
-using System.Threading.Tasks;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Collections.Generic;
@@ -66,6 +64,8 @@ public static class PrepatchManager
 		// 	SetReflectionOnly(fishAssembly, previousFishValue, out _);
 		// }
 
+		Application.logMessageReceivedThreaded -= Verse.Log.Notify_MessageReceivedThreadedInternal;
+
 		AddAttributes(module);
 
 		ModifyAllTypes(module);
@@ -76,9 +76,9 @@ public static class PrepatchManager
 
 		_ = FishSettings.Instance;
 		
-		foreach (var prepatchClass in allPrepatchClasses)
-			prepatchClass.Patches.PatchAll(module);
+		allPrepatchClasses.ApplyPatches(module);
 
+		FishStash.Get.InitializeActivePrepatchIDs();
 		PatchingFinished = true;
 		stopwatch.Stop();
 		Verse.Log.Message($"Performance Fish finished applying prepatches in {
@@ -312,7 +312,7 @@ public static class PrepatchManager
 		
 		debuggableAttribute.Constructor
 			= module.ImportReference(typeof(DebuggableAttribute)
-				.GetConstructor(new[] { typeof(bool), typeof(bool) }));
+				.GetConstructor([typeof(bool), typeof(bool)]));
 		
 		debuggableAttribute.ConstructorArguments.Clear();
 		debuggableAttribute.ConstructorArguments.Add(new(module.TypeSystem.Boolean, false));

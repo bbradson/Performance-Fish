@@ -8,6 +8,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{6948F7E6-7ED7-4716-87EF-CFF1F465F561}"
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
+		..\..\1.4\Defs\GasDefs.xml = ..\..\1.4\Defs\GasDefs.xml
+		..\..\1.4\Defs\MainButtonDefs.xml = ..\..\1.4\Defs\MainButtonDefs.xml
 	EndProjectSection
 EndProject
 Global

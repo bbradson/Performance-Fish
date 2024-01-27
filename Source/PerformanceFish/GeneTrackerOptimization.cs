@@ -10,9 +10,9 @@ using PerformanceFish.Prepatching;
 
 namespace PerformanceFish;
 
-public class GeneTrackerOptimization : ClassWithFishPrepatches
+public sealed class GeneTrackerOptimization : ClassWithFishPrepatches
 {
-	public class GeneTrackerTickPatch : FishPrepatch
+	public sealed class GeneTrackerTickPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Every pawn has a gene tracker, which is responsible for ticking each of their genes. Normally it ticks "
@@ -41,7 +41,7 @@ public class GeneTrackerOptimization : ClassWithFishPrepatches
 					genesToTick[i].Tick();
 			}
 
-			if (instance.pawn.Spawned
+			if (instance.pawn.IsSpawned()
 				&& instance.Xenotype != XenotypeDefOf.Baseliner
 				&& instance.pawn.IsHashIntervalTick(300))
 			{

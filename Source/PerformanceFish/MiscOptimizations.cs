@@ -12,9 +12,9 @@ using static System.Reflection.Emit.OpCodes;
 
 namespace PerformanceFish;
 
-public class MiscPrepatchedOptimizations : ClassWithFishPrepatches
+public sealed class MiscPrepatchedOptimizations : ClassWithFishPrepatches
 {
-	public class GenList_ListFullCopy : FishPrepatch
+	public sealed class GenList_ListFullCopy : FishPrepatch
 	{
 		public override string Description { get; }
 			= "Optimization for a basic and frequently used list copying method. Replaces a for loop with an "
@@ -32,7 +32,7 @@ public class MiscPrepatchedOptimizations : ClassWithFishPrepatches
 		public static List<T> ListFullCopy<T>(List<T> source) => source.Copy();
 	}
 
-	public class GenCollection_FirstOrDefault : FishPrepatch
+	public sealed class GenCollection_FirstOrDefault : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Minor optimization for a RimWorld method used for list lookups, by looping in a more efficient manner "
@@ -46,11 +46,28 @@ public class MiscPrepatchedOptimizations : ClassWithFishPrepatches
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static T? FirstOrDefault<T>(List<T> list, Predicate<T> predicate) => list.FirstOrDefaultFast(predicate);
 	}
+
+	public sealed class GenGrid_InBoundsPatch : FishPrepatch
+	{
+		public override string? Description { get; } = "Tiny optimization by fixing an incorrect cast";
+
+		public override MethodBase TargetMethodBase => methodof((Func<IntVec3, Map, bool>)GenGrid.InBounds);
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static bool ReplacementBody(IntVec3 c, Map map)
+		{
+			var size = map.Size;
+			return (uint)c.x < (uint)size.x && (uint)c.z < (uint)size.z;
+		}
+	}
 }
 
-public class MiscOptimizations : ClassWithFishPatches
+public sealed class MiscOptimizations : ClassWithFishPatches
 {
-	public class WindManager_WindManagerTick : FishPatch
+	public sealed class WindManager_WindManagerTick : FishPatch
 	{
 		public override string Description { get; }
 			= "Throttles plant sway to update at most once per frame instead of every tick. Also fixes the plant sway "
@@ -69,11 +86,10 @@ public class MiscOptimizations : ClassWithFishPatches
 					&& codes[i - 3] == find_CurrentMap
 					&& codes[i - 1] == this_map
 					&& codes[i].operand is Label, // goto return;
-				static code
-					=> new[]
-					{
-						code, FishTranspiler.Call(ShouldSway), FishTranspiler.IfFalse_Short((Label)code.operand)
-					});
+				static code =>
+				[
+					code, FishTranspiler.Call(ShouldSway), FishTranspiler.IfFalse_Short((Label)code.operand)
+				]);
 		}
 
 		public static bool ShouldSway()
@@ -95,7 +111,7 @@ public class MiscOptimizations : ClassWithFishPatches
 		private static bool _lastPrefValue;
 	}
 
-	public class CompRottable : FishPatch
+	public sealed class CompRottable : FishPatch
 	{
 		public override string? Description { get; }
 			= "Throttles rotting on misconfigured defs to only recalculate every 256 ticks, instead of constantly.";
@@ -114,7 +130,7 @@ public class MiscOptimizations : ClassWithFishPatches
 		}
 	}
 
-	public class RitualObligationTrigger_Date : FirstPriorityFishPatch
+	public sealed class RitualObligationTrigger_Date : FirstPriorityFishPatch
 	{
 		public override string? Description { get; }
 			= "Literally just reorders instructions in this method. They were nonsensical, discarding 90% of the "
@@ -141,7 +157,7 @@ public class MiscOptimizations : ClassWithFishPatches
 		}
 	}
 
-	public class ReportProbablyMissingAttributesFix : FishPatch
+	public sealed class ReportProbablyMissingAttributesFix : FishPatch
 	{
 		public override string? Description { get; }
 			= """Fixes the "probably needs a StaticConstructorOnStartup attribute" log warning to display full """
@@ -159,7 +175,7 @@ public class MiscOptimizations : ClassWithFishPatches
 				methodof(Reflection.FullDescription));
 	}
 
-	public class DrawBatch_Flush : FishPatch
+	public sealed class DrawBatch_Flush : FishPatch
 	{
 		public override string Description { get; }
 			= "Optimization of a fleck rendering method. Low - medium performance impact";
@@ -168,7 +184,7 @@ public class MiscOptimizations : ClassWithFishPatches
 
 		public static CodeInstructions? Transpiler(CodeInstructions codeInstructions, ILGenerator generator)
 		{
-			var codes = codeInstructions.ToList();
+			var codes = codeInstructions.AsOrToList();
 
 			var instance_tmpPropertyBlocks
 				= FishTranspiler.Field(typeof(DrawBatch), nameof(DrawBatch.tmpPropertyBlocks));

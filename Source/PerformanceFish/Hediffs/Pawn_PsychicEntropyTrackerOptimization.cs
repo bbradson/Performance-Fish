@@ -5,9 +5,9 @@
 
 namespace PerformanceFish.Hediffs;
 
-public class Pawn_PsychicEntropyTrackerOptimization : ClassWithFishPatches
+public sealed class Pawn_PsychicEntropyTrackerOptimization : ClassWithFishPatches
 {
-	public class Psylink_Patch : FirstPriorityFishPatch
+	public sealed class Psylink_Patch : FirstPriorityFishPatch
 	{
 		public override string Description { get; } = "Caches/throttles the psylink method to only update every 32 ticks.";
 

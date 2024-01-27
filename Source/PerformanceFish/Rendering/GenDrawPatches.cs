@@ -4,9 +4,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /*namespace PerformanceFish.Rendering;
-public class GenDrawPatches : ClassWithFishPatches
+public sealed class GenDrawPatches : ClassWithFishPatches
 {
-	public class DrawMeshNowOrLater_Patch : FishPatch
+	public sealed class DrawMeshNowOrLater_Patch : FishPatch
 	{
 		public override Delegate TargetMethodGroup { get; }
 			= (Action<Mesh, Vector3, Quaternion, Material, bool>)GenDraw.DrawMeshNowOrLater;
@@ -26,7 +26,7 @@ public class GenDrawPatches : ClassWithFishPatches
 		}
 	}
 
-	public class DrawMeshNowOrLaterWithMatrix_Patch : FishPatch
+	public sealed class DrawMeshNowOrLaterWithMatrix_Patch : FishPatch
 	{
 		public override Delegate TargetMethodGroup { get; }
 			= (Action<Mesh, Matrix4x4, Material, bool>)GenDraw.DrawMeshNowOrLater;

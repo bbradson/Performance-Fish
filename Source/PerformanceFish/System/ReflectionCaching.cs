@@ -3,13 +3,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection.Emit;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Threading.Tasks;
 using PerformanceFish.Cache;
+using PerformanceFish.ModCompatibility;
 using ConstructorInfoCache
 	= PerformanceFish.Cache.ByReference<System.RuntimeTypeHandle, System.Reflection.BindingFlags,
 		PerformanceFish.System.ReflectionCaching.ByValueComparableArray<System.Type>,
@@ -49,14 +49,14 @@ using TypeFullNameCache
 using ActivatorCache
 	= PerformanceFish.Cache.ByReferenceUnclearable<System.RuntimeTypeHandle,
 		PerformanceFish.System.ReflectionCaching.ActivatorPatches.ActivatorCacheValue>;
-using ActivatorWithArgumentsCache
-	= PerformanceFish.Cache.ByReference<System.RuntimeTypeHandle,
-		PerformanceFish.System.ReflectionCaching.ByValueComparableArray<System.Type>,
-		PerformanceFish.System.ReflectionCaching.ActivatorPatches.ActivatorCacheValue>;
+// using ActivatorWithArgumentsCache
+// 	= PerformanceFish.Cache.ByReference<System.RuntimeTypeHandle,
+// 		PerformanceFish.System.ReflectionCaching.ByValueComparableArray<System.Type>,
+// 		PerformanceFish.System.ReflectionCaching.ActivatorPatches.ActivatorCacheValue>;
 
 namespace PerformanceFish.System;
 
-public class ReflectionCaching : ClassWithFishPatches
+public sealed class ReflectionCaching : ClassWithFishPatches
 {
 	static ReflectionCaching() // necessary to prevent recursion between patches and function pointer creation
 	{
@@ -85,15 +85,15 @@ public class ReflectionCaching : ClassWithFishPatches
 		public BindingFlags Flags;
 	}
 
-	public class TypePatches
+	public sealed class TypePatches
 	{
-		public class GetField_Patch : FishPatch
+		public sealed class GetField_Patch : FishPatch
 		{
 			public override string Description { get; } = "Caches GetField lookups";
 
 			public override MethodBase TargetMethodInfo { get; }
 				= AccessTools.Method(typeof(RuntimeType), nameof(RuntimeType.GetField),
-					new[] { typeof(string), typeof(BindingFlags) })!;
+					[typeof(string), typeof(BindingFlags)])!;
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static bool Prefix(Type __instance, string name, BindingFlags bindingAttr, out FieldInfo? __result,
@@ -132,11 +132,12 @@ public class ReflectionCaching : ClassWithFishPatches
 					= __result;
 		}
 
-		public class GetMethodWithFlags_Patch : FishPatch
+		public sealed class GetMethodWithFlags_Patch : FishPatch
 		{
 			public override string Description { get; } = "Caches GetMethod lookups";
 
 			public override Expression<Action> TargetMethod { get; }
+			// ReSharper disable once ReturnValueOfPureMethodIsNotUsed
 				= static () => default(Type)!.GetMethod(null!, default(BindingFlags));
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -168,11 +169,12 @@ public class ReflectionCaching : ClassWithFishPatches
 					= __result;
 		}
 
-		public class GetMethodWithTypes_Patch : FishPatch
+		public sealed class GetMethodWithTypes_Patch : FishPatch
 		{
 			public override string Description { get; } = "Caches GetMethod lookups";
 
 			public override Expression<Action> TargetMethod { get; }
+			// ReSharper disable once ReturnValueOfPureMethodIsNotUsed
 				= static () => default(Type)!.GetMethod(null!, null!);
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -201,7 +203,7 @@ public class ReflectionCaching : ClassWithFishPatches
 					= __result;
 		}
 
-		public class GetMethodWithFlagsAndTypes_Patch : FishPatch
+		public sealed class GetMethodWithFlagsAndTypes_Patch : FishPatch
 		{
 			public override string Description { get; } = "Caches GetMethod lookups";
 
@@ -244,7 +246,7 @@ public class ReflectionCaching : ClassWithFishPatches
 					new(types)).Info = __result;
 		}
 
-		public class GetConstructor_Patch : FishPatch
+		public sealed class GetConstructor_Patch : FishPatch
 		{
 			public override string Description { get; } = "Caches GetConstructor lookups";
 
@@ -285,11 +287,12 @@ public class ReflectionCaching : ClassWithFishPatches
 					= __result;
 		}
 
-		public class GetProperty_Patch : FishPatch
+		public sealed class GetProperty_Patch : FishPatch
 		{
 			public override string Description { get; } = "Caches GetProperty lookups";
 
 			public override Expression<Action> TargetMethod { get; }
+			// ReSharper disable once ReturnValueOfPureMethodIsNotUsed
 				= static () => default(Type)!.GetProperty(null!, default(BindingFlags));
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -322,7 +325,7 @@ public class ReflectionCaching : ClassWithFishPatches
 					= __result;
 		}
 
-		public class GetFullName : FishPatch
+		public sealed class GetFullName : FishPatch
 		{
 			public override string? Description { get; }
 				= "Normally averages at over 1000ns per call. Caching makes this about 30 times faster, including "
@@ -354,7 +357,6 @@ public class ReflectionCaching : ClassWithFishPatches
 					ref var centralCache
 						= ref TypeFullNameCache.GetDirectly.GetOrAddReference(instance.TypeHandle);
 					cache.Name = centralCache.Name;
-					// cache.Cached = centralCache.Cached;
 				}
 
 				return cache.Cached;
@@ -374,14 +376,12 @@ public class ReflectionCaching : ClassWithFishPatches
 			{
 				ref var cache = ref TypeFullNameCache.GetExistingReference(__instance.TypeHandle);
 				cache.Name = __result;
-				// cache.Cached = 1;
 				
 				lock (_lock)
 				{
 					ref var centralCache
 						= ref TypeFullNameCache.GetDirectly.GetReference(__instance.TypeHandle);
 					centralCache.Name = __result;
-					// centralCache.Cached = 1;
 				}
 			}
 
@@ -390,6 +390,7 @@ public class ReflectionCaching : ClassWithFishPatches
 
 		// probably never actually needed
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		[SuppressMessage("Globalization", "CA1308")]
 		private static string ToLowerIfNeededForBindingFlags(string name, BindingFlags bindingAttr)
 			=> (bindingAttr & BindingFlags.IgnoreCase) != 0 ? name.ToLowerInvariant() : name;
 
@@ -436,9 +437,9 @@ public class ReflectionCaching : ClassWithFishPatches
 		}
 	}
 
-	public class MonoCustomAttrs
+	public sealed class MonoCustomAttrs
 	{
-		public class GetCustomAttributes : FishPatch
+		public sealed class GetCustomAttributes : FishPatch
 		{
 			public override string? Description { get; }
 				= "Caches attributes for reflection lookups. Decent load time improvement.";
@@ -544,18 +545,24 @@ public class ReflectionCaching : ClassWithFishPatches
 			=> _hashCode;
 	}
 
-	public class ActivatorPatches
+	public sealed class ActivatorPatches
 	{
-		public class CreateInstance_Type : FishPatch
+		public sealed class CreateInstance_Type : FishPatch
 		{
+			public override List<string> IncompatibleModIDs { get; } = [PackageIDs.MULTIPLAYER];
+
 			public override string? Description { get; }
 				= "Optimizes the parameterless Activator.CreateInstance method by invoking through specialized cached "
 				+ "delegates";
 
 			public override Delegate? TargetMethodGroup { get; } = (Func<Type, object>)Activator.CreateInstance;
 
-			public static bool Prefix(Type type, ref object __result)
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static bool Prefix(Type? type, ref object __result)
 			{
+				if (type is null)
+					return true;
+				
 				ref var cache = ref ActivatorCache.GetOrAddReference(type.TypeHandle);
 				
 				if (cache.Dirty
@@ -570,7 +577,7 @@ public class ReflectionCaching : ClassWithFishPatches
 			}
 		}
 
-		// public class CreateInstance_Type_Args : FishPatch
+		// public sealed class CreateInstance_Type_Args : FishPatch
 		// {
 		// 	public override Delegate? TargetMethodGroup { get; }
 		// 		= (Func<Type, object[], object>)Activator.CreateInstance;
@@ -669,9 +676,9 @@ public class ReflectionCaching : ClassWithFishPatches
 	// 	}
 	// }
 
-	public class FieldInfoPatches
+	public sealed class FieldInfoPatches
 	{
-		public class GetValue_Patch : FishPatch
+		public sealed class GetValue_Patch : FishPatch
 		{
 			public override string Description { get; }
 				= "Optimizes the GetValue method by invoking it through specialized cached delegates";
@@ -705,7 +712,7 @@ public class ReflectionCaching : ClassWithFishPatches
 			}
 		}
 
-		public class SetValue_Patch : FishPatch
+		public sealed class SetValue_Patch : FishPatch
 		{
 			public override string Description { get; }
 				= "Optimizes the SetValue method by invoking it through specialized cached delegates";
@@ -718,29 +725,45 @@ public class ReflectionCaching : ClassWithFishPatches
 			{
 				ref var cache = ref FieldSetters.GetOrAddReference(__instance.FieldHandle);
 
-				if (cache.Dirty
-					&& !FieldSetters.UpdateAsyncCache<FieldInfoSetterCache, FieldInfo, FieldSetter>(ref cache,
-						__instance.FieldHandle, __instance))
-				{
+				if (cache.Dirty && !TryUpdate(__instance, ref cache))
 					return true;
-				}
 
 				cache.Result!(obj, value);
 				return false;
 			}
+
+			[MethodImpl(MethodImplOptions.NoInlining)]
+			private static bool TryUpdate(FieldInfo __instance, ref FieldInfoSetterCache cache)
+				=> cache.Task != _fieldSetterFailureTask && __instance.IsConst()
+					? ErrorForInvalidCallAttempt(__instance, ref cache)
+					: FieldSetters.UpdateAsyncCache<FieldInfoSetterCache, FieldInfo, FieldSetter>(ref cache,
+						__instance.FieldHandle, __instance);
+
+			[MethodImpl(MethodImplOptions.NoInlining)]
+			private static bool ErrorForInvalidCallAttempt(FieldInfo info, ref FieldInfoSetterCache cache)
+			{
+				cache.Task = _fieldSetterFailureTask;
+				Log.Error($"FieldInfo.SetValue has been called on '{
+					info.FullDescription()}'. This is a const that gets copied at compile time. An attempt at "
+					+ $"setting a value will always fail.");
+				
+				return false;
+			}
 		}
+
+		private static Task<FieldSetter> _fieldSetterFailureTask = new(static () => null!);
 
 		public static FieldGetter? MakeGetterDelegate(FieldInfo info)
 		{
 			try
 			{
-				var dm = new DynamicMethod($"FieldGetter_{info.Name}", typeof(object), new[] { typeof(object) },
+				var dm = new DynamicMethod($"FieldGetter_{info.Name}", typeof(object), [typeof(object)],
 					GetOwnerType(info), true);
 				var il = dm.GetILGenerator();
 
 				TryEmitFieldInstanceArgument(il, info);
 
-				il.Emit(info is { IsLiteral: true, IsInitOnly: false }
+				il.Emit(info.IsConst()
 						? FishTranspiler.Constant(info.GetRawConstantValue())
 						: FishTranspiler.Field(info));
 
@@ -755,7 +778,7 @@ public class ReflectionCaching : ClassWithFishPatches
 			{
 				Log.Error($"PerformanceFish failed to generate an optimized delegate for {
 					info.FullDescription()}. Reverting to default behaviour instead.\n{ex}\n{
-						new StackTrace() /*StackTraceUtility.ExtractStackTrace()*/}");
+						Environment.StackTrace}");
 				return null;
 			}
 		}
@@ -765,7 +788,7 @@ public class ReflectionCaching : ClassWithFishPatches
 			try
 			{
 				var dm = new DynamicMethod($"FieldSetter_{info.Name}", typeof(void),
-					new[] { typeof(object), typeof(object) }, GetOwnerType(info), true);
+					[typeof(object), typeof(object)], GetOwnerType(info), true);
 				var il = dm.GetILGenerator();
 
 				TryEmitFieldInstanceArgument(il, info);
@@ -776,18 +799,17 @@ public class ReflectionCaching : ClassWithFishPatches
 				{
 					il.Emit(FishTranspiler.Call(typeof(ReflectionCaching),
 						info.FieldType.IsNullable() ? nameof(UnboxNullableSafely) : nameof(UnboxSafely),
-						new[] { typeof(object) },
-						new[]
-						{
+						[typeof(object)],
+						[
 							info.FieldType.IsNullable() // TODO: verify that this is actually correct
 								? Nullable.GetUnderlyingType(info.FieldType)
 								: info.FieldType
-						}));
+						]));
 				}
 				else
 				{
 					il.Emit(FishTranspiler.Call(typeof(ReflectionCaching), nameof(CastOrConvert),
-						generics: new[] { info.FieldType }));
+						generics: [info.FieldType]));
 				}
 
 				il.Emit(FishTranspiler.StoreField(info));
@@ -800,7 +822,7 @@ public class ReflectionCaching : ClassWithFishPatches
 			{
 				Log.Error($"PerformanceFish failed to generate an optimized delegate for {
 					info.FullDescription()}. Reverting to default behaviour instead.\n{ex}\n{
-						new StackTrace() /*StackTraceUtility.ExtractStackTrace()*/}");
+						Environment.StackTrace}");
 				return null;
 			}
 		}
@@ -839,9 +861,9 @@ public class ReflectionCaching : ClassWithFishPatches
 		public delegate void FieldSetter(object? obj, object? value);
 	}
 
-	public class MethodBasePatches
+	public sealed class MethodBasePatches
 	{
-		public class Invoke_Patch : FishPatch
+		public sealed class Invoke_Patch : FishPatch
 		{
 			public override bool DefaultState => false; // TODO: fix
 
@@ -885,6 +907,7 @@ public class ReflectionCaching : ClassWithFishPatches
 		}
 
 		// Similar to HarmonyLib.MethodInvoker, but correctly handles a couple of edge cases Harmony would throw on.
+		[SuppressMessage("Globalization", "CA1310")]
 		public static MethodInvoker? MakeInvokeDelegate(MethodBase methodBase)
 		{
 			if (methodBase.DeclaringType is null && methodBase.Name.StartsWith("PadMethod"))
@@ -902,7 +925,7 @@ public class ReflectionCaching : ClassWithFishPatches
 					return null;
 				
 				var dm = new DynamicMethod($"MethodInvoker_{methodBase.Name}", typeof(object),
-					new[] { typeof(object), typeof(object[]) },
+					[typeof(object), typeof(object[])],
 					GetOwnerType(methodBase), true);
 				var il = dm.GetILGenerator();
 
@@ -937,7 +960,7 @@ public class ReflectionCaching : ClassWithFishPatches
 			{
 				Log.Warning($"PerformanceFish failed to generate an optimized delegate for {
 					Reflection.FullDescription(methodBase)}. Reverting to default behaviour instead.\n{ex}\n{
-						new StackTrace() /*StackTraceUtility.ExtractStackTrace()*/}");
+						Environment.StackTrace}");
 				return null;
 			}
 		}
@@ -961,15 +984,14 @@ public class ReflectionCaching : ClassWithFishPatches
 			il.Emit(parameterType.IsValueType
 				? FishTranspiler.Call(typeof(ReflectionCaching),
 					parameterType.IsNullable() ? nameof(UnboxNullableSafely) : nameof(UnboxSafely),
-					new[] { typeof(object) },
-					new[]
-					{
+					[typeof(object)],
+					[
 						parameterType.IsNullable()
 							? Nullable.GetUnderlyingType(parameterType)
 							: parameterType
-					})
+					])
 				: FishTranspiler.Call(typeof(ReflectionCaching), nameof(CastOrConvert),
-					generics: new[] { parameterType }));
+					generics: [parameterType]));
 		}
 
 		private static void EmitInvokeByRefParameterLoad(ILGenerator il, Type parameterType)
@@ -981,7 +1003,7 @@ public class ReflectionCaching : ClassWithFishPatches
 			if (parameterType.IsNullable())
 			{
 				il.Emit(FishTranspiler.Call(typeof(ReflectionCaching), nameof(VerifyNullableBoxObject),
-					generics: new[] { Nullable.GetUnderlyingType(parameterType) }));
+					generics: [Nullable.GetUnderlyingType(parameterType)]));
 				
 				il.Emit(FishTranspiler.UnboxAddress(parameterType));
 			}
@@ -989,16 +1011,13 @@ public class ReflectionCaching : ClassWithFishPatches
 			{
 				il.Emit(parameterType.IsValueType
 					? FishTranspiler.Call(typeof(ReflectionCaching), nameof(UnboxRefSafely),
-						// new[] { typeof(object).MakeByRefType() },
-						generics: new[]
-						{
+						generics:
+						[
 							/*parameterType.IsNullable()
 							? Nullable.GetUnderlyingType(parameterType)
 							:*/ parameterType
-						})
-					: FishTranspiler.Call(typeof(ReflectionCaching), nameof(CastRefSafely),
-						// new[] { typeof(object).MakeByRefType() },
-						generics: new[] { parameterType }));
+						])
+					: FishTranspiler.Call(typeof(ReflectionCaching), nameof(CastRefSafely), generics: [parameterType]));
 			}
 		}
 
@@ -1022,14 +1041,12 @@ public class ReflectionCaching : ClassWithFishPatches
 		if (declaringType.IsValueType)
 		{
 			il.Emit(FishTranspiler.ArgumentAddress(0));
-			il.Emit(FishTranspiler.Call(typeof(ReflectionCaching), nameof(UnboxRefSafely),
-				generics: new[] { declaringType }));
+			il.Emit(FishTranspiler.Call(typeof(ReflectionCaching), nameof(UnboxRefSafely), generics: [declaringType]));
 		}
 		else
 		{
 			il.Emit(FishTranspiler.This);
-			il.Emit(FishTranspiler.Call(typeof(ReflectionCaching), nameof(CastOrConvert),
-				generics: new[] { declaringType }));
+			il.Emit(FishTranspiler.Call(typeof(ReflectionCaching), nameof(CastOrConvert), generics: [declaringType]));
 		}
 	}
 

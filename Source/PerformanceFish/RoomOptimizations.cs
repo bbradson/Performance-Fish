@@ -12,14 +12,15 @@ using RoomRoleCache
 using ContainedAndAdjacentThingsCache
 	= PerformanceFish.Cache.ByIndex<Verse.Room,
 		PerformanceFish.RoomOptimizations.ContainedAndAdjacentThings_Patch.CacheValue>;
+using OpCodes = System.Reflection.Emit.OpCodes;
 
 namespace PerformanceFish;
 
-public class RoomOptimizations : ClassWithFishPatches, IHasDescription
+public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 {
 	public string Description { get; } = "Room stats related optimizations";
 
-	public class Role_Patch : FirstPriorityFishPatch
+	public sealed class Role_Patch : FirstPriorityFishPatch
 	{
 		public override string Description { get; }
 			= "Throttles room stats and role updating to happen at most once every 512 or so ticks per room, "
@@ -38,13 +39,13 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 						=> i - 1 > 0
 						&& codes[i - 1] == this_statsAndRoleDirty
 						&& codes[i].opcode == OpCodes.Brfalse_S
-						&& codes[i].operand is Label, static code => new[]
-					{
+						&& codes[i].operand is Label, static code =>
+					[
 						code,
 						FishTranspiler.This,
 						FishTranspiler.Call(ShouldUpdate),
 						FishTranspiler.IfFalse_Short((Label)code.operand)
-					});
+					]);
 			}
 			catch (Exception ex)
 			{
@@ -83,7 +84,7 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		}
 	}
 
-	public class Owners_Patch : FirstPriorityFishPatch
+	public sealed class Owners_Patch : FirstPriorityFishPatch
 	{
 		public override string Description { get; }
 			= "Caches room owner data and throttles them to only update at most once every ~512 or so ticks. "
@@ -142,7 +143,7 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			{
 				if (result is null)
 				{
-					(Owners ??= new(0)).Clear();
+					(Owners ??= []).Clear();
 				}
 				else
 				{
@@ -153,7 +154,7 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 					}
 					else
 					{
-						Owners = new(result);
+						Owners = [..result];
 					}
 				}
 				
@@ -168,7 +169,7 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		}
 	}
 
-	public class Regions_Patch : FirstPriorityFishPatch
+	public sealed class Regions_Patch : FirstPriorityFishPatch
 	{
 		public override string Description { get; } = "Minor optimization";
 		public override MethodBase TargetMethodInfo { get; }
@@ -191,7 +192,7 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		}
 	}
 
-	public class ContainedBeds_Patch : FirstPriorityFishPatch
+	public sealed class ContainedBeds_Patch : FirstPriorityFishPatch
 	{
 		public override string Description { get; }
 			= "So RimWorld has a list of beds and a list of all things. For some reason Ludeon chose to have "
@@ -225,7 +226,7 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		}
 	}
 
-	public class ContainedAndAdjacentThings_Patch : FirstPriorityFishPatch
+	public sealed class ContainedAndAdjacentThings_Patch : FirstPriorityFishPatch
 	{
 		public override string Description { get; } = "Caching of room content info. Variable impact";
 
@@ -279,7 +280,7 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			var uniqueContainedThings = instance.uniqueContainedThings;
 			var uniqueContainedThingsSet = instance.uniqueContainedThingsSet;
 			uniqueContainedThingsSet.Clear();
-			(cache.ListVersions ??= new()).Clear();
+			(cache.ListVersions ??= []).Clear();
 
 			for (var i = 0; i < regions.Count; i++)
 			{
@@ -301,7 +302,7 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			if (cache.Things is { } list)
 				list.ReplaceContentsWith(uniqueContainedThings);
 			else
-				cache.Things = new(uniqueContainedThings);
+				cache.Things = [..uniqueContainedThings];
 			
 			cache.SetDirty(false, instance);
 
@@ -333,7 +334,7 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 				var count = allThings.Count;
 				for (var j = 0; j < count; j++)
 				{
-					if (regionGrid[CellIndicesUtility.CellToIndex(allThings[j].Position, mapSizeX)] == region)
+					if (regionGrid[allThings[j].Position.CellToIndex(mapSizeX)] == region)
 						uniqueContainedThings.Add(allThings[j]);
 					else
 						adjacentThings.Add(allThings[j]);
@@ -376,7 +377,7 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		}
 	}
 
-	public class RoomAt_Patch : FirstPriorityFishPatch
+	public sealed class RoomAt_Patch : FirstPriorityFishPatch
 	{
 		public override string? Description { get; }
 			= "Minor optimization through inlining ond cleaning up of duplicate calls in the method. About 1/4 "
@@ -390,8 +391,8 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static Room? RoomAt(IntVec3 c, Map map, RegionType allowedRegionTypes = RegionType.Set_All)
 		{
-			var mapSize = map.info.Size;
-			if ((uint)c.x >= (uint)mapSize.x || (uint)c.z >= (uint)mapSize.z)
+			var cellIndices = map.cellIndices;
+			if (((uint)c.x >= (uint)cellIndices.mapSizeX) | ((uint)c.z >= (uint)cellIndices.mapSizeZ))
 				return null;
 
 			var regionAndRoomUpdater = map.regionAndRoomUpdater;
@@ -401,11 +402,11 @@ public class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			}
 			else if (regionAndRoomUpdater.AnythingToRebuild)
 			{
-				Log.Warning($"Trying to get valid region at {
-						c.ToString()} but RegionAndRoomUpdater is disabled. The result may be incorrect.");
+				Verse.Log.Warning($"Trying to get valid region at {
+					c.ToString()} but RegionAndRoomUpdater is disabled. The result may be incorrect.");
 			}
 
-			var region = map.regionGrid.regionGrid[(c.z * mapSize.x) + c.x];
+			var region = map.regionGrid.regionGrid[(c.z * cellIndices.mapSizeX) + c.x];
 			return region is null || !region.valid || (region.type & allowedRegionTypes) == 0
 				? null
 				: region.District?.Room;

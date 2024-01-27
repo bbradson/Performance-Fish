@@ -5,13 +5,13 @@
 
 /*namespace PerformanceFish.Rendering;
 
-public class PawnCacheRendererPatches : ClassWithFishPatches
+public sealed class PawnCacheRendererPatches : ClassWithFishPatches
 	// The PawnCacheRenderer's Camera.Render() call has a considerable performance impact despite only being used for
 	// rendering of single pawns. These are failed attempts at lowering its impact.
 {
 	private static bool _optimizeCameraEnabled;
 
-	public class OnPostRender_Patch : FishPatch
+	public sealed class OnPostRender_Patch : FishPatch
 	{
 		public override MethodBase TargetMethodInfo
 			=> AccessTools.DeclaredMethod(typeof(PawnCacheRenderer), nameof(PawnCacheRenderer.OnPostRender));
@@ -33,7 +33,7 @@ public class PawnCacheRendererPatches : ClassWithFishPatches
 		private static int? _defaultCullinkMask;
 	}
 
-	public class RenderPawn_Patch : FishPatch
+	public sealed class RenderPawn_Patch : FishPatch
 	{
 		public override MethodBase TargetMethodInfo
 			=> AccessTools.DeclaredMethod(typeof(PawnCacheRenderer), nameof(PawnCacheRenderer.RenderPawn));

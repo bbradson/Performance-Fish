@@ -12,16 +12,51 @@ namespace PerformanceFish.Cache;
 [PublicAPI]
 public record struct ByInt<T, TResult> where T : notnull where TResult : new()
 {
-	private static FishTable<ByInt<T, TResult>, TResult> _get
-		= Utility.AddNew<ByInt<T, TResult>, TResult>();
+	public int Key;
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public unsafe ByInt(T key) => Key = FunctionPointers.IndexGetter<T>.Default(key);
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public ByInt(int key) => Key = key;
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public bool Equals(ByInt<T, TResult> other) => Key == other.Key;
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public override int GetHashCode() => Key;
+	
+	private static object _valueInitializerLock = new();
+
+	private static FishTable<ByInt<T, TResult>, TResult> _get = InitializeNew();
 
 	[ThreadStatic]
 	private static FishTable<ByInt<T, TResult>, TResult>? _getThreadStatic;
 
+	private static Func<ByInt<T, TResult>, TResult>? _valueInitializer;
+	
+	public static Func<ByInt<T, TResult>, TResult>? ValueInitializer
+	{
+		get
+		{
+			lock (_valueInitializerLock)
+				return _valueInitializer;
+		}
+		set
+		{
+			lock (_valueInitializerLock)
+			{
+				value ??= static _ => Reflection.New<TResult>();
+				_valueInitializer = value;
+				_get.ValueInitializer = value;
+			}
+		}
+	}
+
 	public static FishTable<ByInt<T, TResult>, TResult> Get
 	{
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		get => _getThreadStatic ??= Utility.AddNew<ByInt<T, TResult>, TResult>();
+		get => _getThreadStatic ??= InitializeNew();
 	}
 
 	public static FishTable<ByInt<T, TResult>, TResult> GetDirectly
@@ -40,6 +75,15 @@ public record struct ByInt<T, TResult> where T : notnull where TResult : new()
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static ref TResult GetOrAddReference(ref ByInt<T, TResult> key) => ref Get.GetOrAddReference(ref key);
 
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static TResult GetOrAdd(int key) => Get.GetOrAdd(Unsafe.As<int, ByInt<T, TResult>>(ref key));
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static TResult GetOrAdd(ByInt<T, TResult> key) => Get.GetOrAdd(key);
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static TResult GetOrAdd(ref ByInt<T, TResult> key) => Get.GetOrAdd(ref key);
+
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static ref TResult GetExistingReference(int key)
 		=> ref Get.GetReference(Unsafe.As<int, ByInt<T, TResult>>(ref key));
@@ -47,19 +91,8 @@ public record struct ByInt<T, TResult> where T : notnull where TResult : new()
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static ref TResult GetExistingReference(T key) => ref Get.GetReference(new(key));
 
-	public int Key;
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public unsafe ByInt(T key) => Key = FunctionPointers.IndexGetter<T>.Default(key);
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public ByInt(int key) => Key = key;
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public bool Equals(ByInt<T, TResult> other) => Key == other.Key;
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode() => Key;
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static FishTable<ByInt<T, TResult>, TResult> InitializeNew() => Utility.AddNew(ValueInitializer);
 }
 
 [PublicAPI]

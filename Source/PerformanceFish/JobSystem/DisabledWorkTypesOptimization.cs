@@ -3,12 +3,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+using PerformanceFish.ModCompatibility;
+
 namespace PerformanceFish.JobSystem;
 
-public class DisabledWorkTypesOptimization : ClassWithFishPatches
+public sealed class DisabledWorkTypesOptimization : ClassWithFishPatches
 {
-	public class PawnGetDisabledWorkTypes : FishPatch
+	public sealed class PawnGetDisabledWorkTypes : FishPatch
 	{
+		public override List<string> IncompatibleModIDs { get; } = [PackageIDs.MULTIPLAYER];
+
 		public override string? Description { get; }
 			= "Essentially fixes a bug in Pawn.GetDisabledWorkTypes that causes the method to discard its cache and "
 			+ "constantly keep recalculating. With the patch applied it'll return early when a valid cache exists.";

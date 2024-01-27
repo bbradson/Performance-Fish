@@ -6,17 +6,17 @@
 using System.IO;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
-using PerformanceFish.Pools;
+using FisheryLib.Pools;
 using PerformanceFish.Prepatching;
 using RimWorld.IO;
 
 namespace PerformanceFish;
 
-public class TextureLoadingPatches : ClassWithFishPrepatches
+public sealed class TextureLoadingPatches : ClassWithFishPrepatches
 {
 	public const string DDS_EXTENSION = ".dds";
 	
-	public class ModContentLoader_StaticConstructor : FishPrepatch
+	public sealed class ModContentLoader_StaticConstructor : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Adds .dds to the accepted extensions for texture loading. Those files load faster than png, render at "
@@ -30,7 +30,7 @@ public class TextureLoadingPatches : ClassWithFishPrepatches
 				= ModContentLoader<T>.AcceptableExtensionsTexture.Add(DDS_EXTENSION);
 	}
 	
-	public class ModContentLoader_LoadItem : FishPrepatch
+	public sealed class ModContentLoader_LoadItem : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Adds .dds to the accepted extensions for texture loading. Those files load faster than png, render at "
@@ -52,7 +52,7 @@ public class TextureLoadingPatches : ClassWithFishPrepatches
 		}
 	}
 	
-	public class ModContentLoader_LoadTexture : FishPrepatch
+	public sealed class ModContentLoader_LoadTexture : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Adds .dds to the accepted extensions for texture loading. Those files load faster than png, render at "
@@ -146,7 +146,7 @@ public class TextureLoadingPatches : ClassWithFishPrepatches
 	public static FileInfo? GetFileInfo(VirtualFile file)
 		=> file is FilesystemFile systemFile ? systemFile.fileInfo : null;
 
-	public class GetAllFilesForModPatch : FishPrepatch
+	public sealed class GetAllFilesForModPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Adds .dds to the accepted extensions for texture loading. Those files load faster than png, render at "
@@ -162,7 +162,7 @@ public class TextureLoadingPatches : ClassWithFishPrepatches
 				&& method.DeclaringType.Name == "Dictionary`2");
 
 			ilProcessor.instructions[index].Operand = module.ImportReference(AccessTools.Constructor(
-				typeof(Dictionary<string, FileInfo>), new[] { typeof(IEqualityComparer<string>) }));
+				typeof(Dictionary<string, FileInfo>), [typeof(IEqualityComparer<string>)]));
 			ilProcessor.InsertAt(index, OpCodes.Call, AccessTools.PropertyGetter(typeof(StringComparer),
 				nameof(StringComparer.OrdinalIgnoreCase)));
 		}

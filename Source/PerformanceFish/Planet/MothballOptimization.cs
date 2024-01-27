@@ -11,14 +11,14 @@ using RimWorld.Planet;
 
 namespace PerformanceFish.Planet;
 
-public class MothballOptimization : ClassWithFishPrepatches
+public sealed class MothballOptimization : ClassWithFishPrepatches
 {
 	public const string BASIC_DESCRIPTION
 		= "Mothballing means to \"take something out of operation but maintain it so that it can be used in the "
 		+ "future.\" RimWorld has this system for world pawns along with a number of conditions which can block it "
 		+ "from taking effect.";
 	
-	public class WorldPawnsDefPreventingMothball : FishPrepatch
+	public sealed class WorldPawnsDefPreventingMothball : FishPrepatch
 	{
 		public override string? Description { get; }
 			= BASIC_DESCRIPTION + " This patch essentially serves as a whitelist to allow mothballing a lot more "

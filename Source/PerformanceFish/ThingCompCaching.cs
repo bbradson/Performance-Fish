@@ -9,11 +9,15 @@ using IdeoForbidsCache
 
 namespace PerformanceFish;
 
-public class ThingCompCaching : ClassWithFishPatches
+public sealed class ThingCompCaching : ClassWithFishPatches
 {
-	public class CompAssignableToPawn_Bed_Patch : FishPatch
+	public sealed class CompAssignableToPawn_Bed_Patch : FishPatch
 	{
-		public override string Description { get; } = "Caches results of CompAssignableToPawn_Bed.IdeoligionForbids";
+		public override string Description { get; }
+			= "Caches results of CompAssignableToPawn_Bed.IdeoligionForbids"
+				.AppendWhen(!ModsConfig.IdeologyActive, ". Requires Ideology");
+
+		public override bool Enabled => base.Enabled && ModsConfig.IdeologyActive;
 
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.Method(typeof(CompAssignableToPawn_Bed), nameof(CompAssignableToPawn_Bed.IdeoligionForbids));
@@ -21,7 +25,7 @@ public class ThingCompCaching : ClassWithFishPatches
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool Prefix(CompAssignableToPawn_Bed __instance, Pawn? pawn, ref bool __result, out bool __state)
 		{
-			if (pawn is null)
+			if (pawn is null || __instance.Props.maxAssignedPawnsCount == 1)
 			{
 				__state = false;
 				return true;
@@ -54,16 +58,16 @@ public class ThingCompCaching : ClassWithFishPatches
 	public record struct IdeoForbidsCacheValue
 	{
 		public bool Result;
-		private int _nextRefreshTick;
-		private int _assignedPawnsVersion;
-		private int _directRelationsVersion;
-		private List<Pawn> _assignedPawns;
-		private List<DirectPawnRelation> _directRelations;
+		private int _nextRefreshTick = -2;
+		private int _assignedPawnsVersion = -2;
+		private int _directRelationsVersion = -2;
+		private List<Pawn> _assignedPawns = _nullPawns;
+		private List<DirectPawnRelation> _directRelations = _nullRelations;
 		
 		public void Update(CompAssignableToPawn_Bed comp, Pawn pawn, bool result)
 		{
-			_directRelations = pawn.relations.DirectRelations;
-			_assignedPawns = comp.assignedPawns;
+			_directRelations = pawn.relations?.DirectRelations ?? _nullRelations;
+			_assignedPawns = comp.assignedPawns ?? _nullPawns;
 			_directRelationsVersion = _directRelations._version;
 			Result = result;
 			_assignedPawnsVersion = _assignedPawns._version;
@@ -77,6 +81,13 @@ public class ThingCompCaching : ClassWithFishPatches
 				=> TickHelper.Past(_nextRefreshTick)
 					|| _assignedPawnsVersion != _assignedPawns._version
 					|| _directRelationsVersion != _directRelations._version;
+		}
+
+		private static readonly List<DirectPawnRelation> _nullRelations = [];
+		private static readonly List<Pawn> _nullPawns = [];
+
+		public IdeoForbidsCacheValue()
+		{
 		}
 	}
 }

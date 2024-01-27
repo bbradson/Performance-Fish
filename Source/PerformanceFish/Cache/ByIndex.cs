@@ -194,7 +194,7 @@ public class ByIndex<T_first, T_second, T_out> : ByIndex<T_first, ByIndex<T_seco
 		ResizeIfNecessary(firstIndex);
 
 		ref var inner = ref _items[firstIndex];
-		inner ??= new();
+		inner ??= [];
 
 		return inner;
 	}

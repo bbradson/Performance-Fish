@@ -13,9 +13,11 @@ public static class PackageIDs
 		// GRADIENT_HAIR = "automatic.gradienthair",
 		GRAPHICS_SETTINGS = "Telefonmast.GraphicsSettings",
 		HARMONY = "brrainz.harmony",
+		HUMAN_RESOURCES = "JPT.HumanResources",
 		MULTIPLAYER = "rwmt.Multiplayer",
 		PERFORMANCE_FISH = "bs.performance",
 		PERFORMANCE_OPTIMIZER = "Taranchuk.PerformanceOptimizer",
 		PREPATCHER = "zetrith.prepatcher",
+		USE_BEST_MATERIALS = "kathanon.UseBestMaterials",
 		VANILLA_EXPANDED_FRAMEWORK = "OskarPotocki.VanillaFactionsExpanded.Core";
 }

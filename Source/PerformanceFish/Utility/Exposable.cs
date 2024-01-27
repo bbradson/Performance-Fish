@@ -9,10 +9,9 @@ namespace PerformanceFish.Utility;
 /// Scribe_Deep normally creates a new instance when loading data. Scribe on this class prevents that. Also includes a
 /// try-catch block
 /// </summary>
-public class Exposable : IExposable
+public sealed class Exposable(IExposable @this) : IExposable
 {
-	public readonly IExposable Parent;
-	public Exposable(IExposable @this) => Parent = @this;
+	public readonly IExposable Parent = @this;
 
 	public void ExposeData()
 	{
@@ -27,7 +26,7 @@ public class Exposable : IExposable
 	}
 
 	public override string ToString() => TrimName(Parent.ToString());
-	public override bool Equals(object obj) => obj.Equals(Parent);
+	public override bool Equals(object? obj) => Parent.Equals(obj);
 	public override int GetHashCode() => Parent.GetHashCode();
 
 	public static void Scribe(IExposable iExposable, string label, bool trimLabel = true)

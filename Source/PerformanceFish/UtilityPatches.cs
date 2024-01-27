@@ -5,11 +5,13 @@
 
 namespace PerformanceFish;
 
-public class UtilityPatches : ClassWithFishPatches
+public sealed class UtilityPatches : ClassWithFishPatches
 {
-	public class FinalizeInit_Patch : FishPatch
+	public sealed class FinalizeInit_Patch : FishPatch
 	{
 		public override bool Enabled => true;
+
+		public override bool ShowSettings => false;
 
 		public override string Description { get; }
 			= "Necessary for patches that require a loaded game to function";
@@ -31,13 +33,15 @@ public class UtilityPatches : ClassWithFishPatches
 		}
 	}
 
-	public class ClearAllMapsAndWorld_Patch : FishPatch
+	public sealed class ClearAllMapsAndWorld_Patch : FishPatch
 	{
 		public override bool Enabled => true;
 
+		public override bool ShowSettings => false;
+
 		public override string Description { get; }
-			= "A patch to make the game clear all Performance Fish caches whenever saves get unloaded, to avoid "
-			+ "anything getting carried over to a new game by mistake";
+			= "This clears all Performance Fish caches whenever saves get unloaded, to avoid anything getting carried "
+			+ "over to a new game by mistake";
 
 		public override Delegate TargetMethodGroup => Verse.Profile.MemoryUtility.ClearAllMapsAndWorld;
 

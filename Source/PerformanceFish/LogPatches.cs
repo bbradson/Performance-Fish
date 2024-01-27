@@ -12,25 +12,27 @@ using FieldAttributes = Mono.Cecil.FieldAttributes;
 
 namespace PerformanceFish;
 
-public class LogPatches : ClassWithFishPrepatches
+public sealed class LogPatches : ClassWithFishPrepatches
 {
 	public const string PERFORMANCE_FISH_WELCOME_MESSAGE = "Performance Fish!!!";
 	public const string PERFORMANCE_FISH_WELCOME_STACKTRACE = "UwU";
 	
 	// This breaks my FishStash somehow // TODO: FIX
-	// public class LogVersionNumberPatch : FishPrepatch
+	// public sealed class LogVersionNumberPatch : FishPrepatch
 	// {
 	// 	public override MethodBase MethodBase { get; } = methodof(Root.CheckGlobalInit);
 	//
 	// 	public static void Prefix() => Log.Message("Performance Fish???");
 	// }
 	
-	public class ClassPatch : FishClassPrepatch
+	public sealed class ClassPatch : FishClassPrepatch
 	{
 		public override string? Description { get; }
 			= "Important logging patch";
 
 		public override bool Enabled => true;
+
+		public override bool ShowSettings => false;
 
 		public override Type Type => typeof(Verse.Log);
 
@@ -49,7 +51,7 @@ public class LogPatches : ClassWithFishPrepatches
 			staticConstructorBody.GetILProcessor().InsertRange(staticConstructorBody.Instructions.Count - 2,
 				(OpCodes.Ldc_I8, FishStash.StaticHandle),
 				(OpCodes.Newobj,
-					module.ImportReference(typeof(FishStashHandle).GetConstructor(new[] { typeof(long) }))),
+					module.ImportReference(typeof(FishStashHandle).GetConstructor([typeof(long)]))),
 				(OpCodes.Stsfld, fishStashHandleField),
 				(OpCodes.Call, module.ImportReference(InsertEarlyMessages)));
 		}

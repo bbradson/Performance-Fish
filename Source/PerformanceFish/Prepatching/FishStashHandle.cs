@@ -7,9 +7,9 @@ using System.Runtime.InteropServices;
 
 namespace PerformanceFish.Prepatching;
 
-public class FishStashHandle : IDisposable
+public sealed class FishStashHandle : IDisposable
 {
-	private static readonly List<nint> _allHandles = new();
+	private static readonly List<nint> _allHandles = [];
 	
 	public ref FishStash Stash => ref FishStash.FromHandle(Handle);
 
@@ -25,17 +25,18 @@ public class FishStashHandle : IDisposable
 		Handle = (nint)handle;
 	}
 
-	private void ReleaseUnmanagedResources()
+	private void Dispose(bool _)
 	{
+		Stash.Release();
 		Marshal.FreeHGlobal(Handle);
 		_allHandles.Remove(Handle);
 	}
 
 	public void Dispose()
 	{
-		ReleaseUnmanagedResources();
+		Dispose(true);
 		GC.SuppressFinalize(this);
 	}
 
-	~FishStashHandle() => ReleaseUnmanagedResources();
+	~FishStashHandle() => Dispose(false);
 }

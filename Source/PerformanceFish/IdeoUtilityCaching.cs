@@ -10,9 +10,9 @@ using StyleDominanceCache
 
 namespace PerformanceFish;
 
-public class IdeoUtilityCaching : ClassWithFishPrepatches
+public sealed class IdeoUtilityCaching : ClassWithFishPrepatches
 {
-	public class GetStyleDominance_Patch : FishPrepatch
+	public sealed class GetStyleDominance_Patch : FishPrepatch
 	{
 		public override string Description { get; }
 			= "Caches IdeoUtility.GetStyleDominance to only update about once every 900 ticks or so.";

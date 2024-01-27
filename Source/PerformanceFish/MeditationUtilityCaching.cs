@@ -10,9 +10,9 @@ using PsyfocusGainCache
 namespace PerformanceFish;
 
 // Suggested by https://github.com/notfood
-public class MeditationUtilityCaching : ClassWithFishPatches
+public sealed class MeditationUtilityCaching : ClassWithFishPatches
 {
-	public class PsyfocusGainPerTick : FirstPriorityFishPatch
+	public sealed class PsyfocusGainPerTick : FirstPriorityFishPatch
 	{
 		public override string? Description { get; } = "Caches psyfocus gain per tick while the target remains "
 			+ "constant. Impactful in psycasting focused playthroughs";

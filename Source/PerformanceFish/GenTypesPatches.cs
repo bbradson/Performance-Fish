@@ -10,9 +10,9 @@ using PerformanceFish.Prepatching;
 
 namespace PerformanceFish;
 
-public class GenTypesPatches : ClassWithFishPrepatches
+public sealed class GenTypesPatches : ClassWithFishPrepatches
 {
-	public class AllTypes : FishPrepatch
+	public sealed class AllTypes : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Fix for thread safety. The vanilla method was rarely breaking and preventing the game from loading";
@@ -29,7 +29,7 @@ public class GenTypesPatches : ClassWithFishPrepatches
 		public static void Postfix() => Monitor.Exit(Lock); // TODO: replace with finalizer
 	}
 
-	public class AllTypesWithAttribute : FishPrepatch
+	public sealed class AllTypesWithAttribute : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Fix for thread safety. The vanilla method was rarely breaking and preventing the game from loading";
@@ -62,7 +62,7 @@ public class GenTypesPatches : ClassWithFishPrepatches
 			=> static type => type.HasAttribute<TAttr>();
 	}
 
-	public class AllSubclasses : FishPrepatch
+	public sealed class AllSubclasses : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Fix for thread safety. The vanilla method was rarely breaking and preventing the game from loading";
@@ -94,14 +94,14 @@ public class GenTypesPatches : ClassWithFishPrepatches
 
 		public static Func<Type, bool> Predicate = new PredicateClass().Invoke;
 
-		public class PredicateClass
+		public sealed class PredicateClass
 		{
 			public Type? BaseType;
 			public bool Invoke(Type type) => type.IsSubclassOf(BaseType!);
 		}
 	}
 
-	public class AllSubclassesNonAbstract : FishPrepatch
+	public sealed class AllSubclassesNonAbstract : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Fix for thread safety, paired with a small optimization for faster loading. The vanilla method was "

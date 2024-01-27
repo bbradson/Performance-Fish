@@ -104,7 +104,7 @@ public static class DDSLoader
 		
 		if ((dds_pxlf_dwFlags & DDPF_FOURCC) != 0)
 		{
-			// Texture dos not contain RGB data, check FourCC for format
+			// Texture does not contain RGB data, check FourCC for format
 			isCompressed = true;
 
 			if (FourCcEquals(dds_pxlf_dwFourCC, "DXT1"))

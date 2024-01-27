@@ -13,9 +13,9 @@ using static PerformanceFish.TranspilerHelpers;
 
 namespace PerformanceFish.JobSystem;
 
-public class JobGiver_WorkPatches : ClassWithFishPatches
+public sealed class JobGiver_WorkPatches : ClassWithFishPatches
 {
-	public class TryIssueJobPackage_InnerDelegate_Patch : FishPatch
+	public sealed class TryIssueJobPackage_InnerDelegate_Patch : FishPatch
 	{
 		public override string Description => "Work scanning optimization. Splits the IsForbidden and HasJobOnThing checks into separate loops, then threads the IsForbidden loop, sorts it, caches the result and skips any following duplicate checks";
 		public override MethodBase TargetMethodInfo => AccessTools.FindIncludingInnerTypes(typeof(JobGiver_Work),
@@ -44,7 +44,7 @@ public class JobGiver_WorkPatches : ClassWithFishPatches
 		}
 	}
 
-	public class TryIssueJobPackage_Patch : FishPatch
+	public sealed class TryIssueJobPackage_Patch : FishPatch
 	{
 		public override string Description => "Work scanning optimization. Splits the IsForbidden and HasJobOnThing checks into separate loops, then threads the IsForbidden loop, sorts it, caches the result and skips any following duplicate checks";
 		public override MethodBase TargetMethodInfo => AccessTools.Method(typeof(JobGiver_Work), nameof(JobGiver_Work.TryIssueJobPackage));
@@ -243,7 +243,7 @@ public class JobGiver_WorkPatches : ClassWithFishPatches
 		public static Dictionary<IEnumerable<Thing>, IEnumerable<Thing>> PrefilteredPotentialWorkThingsGlobal { get; } = new();
 	}
 
-	public class ThingRequest_IsUndefined_Patch : FishPatch
+	public sealed class ThingRequest_IsUndefined_Patch : FishPatch
 	{
 		public override string Description => "Part of the work scanning optimization";
 		public override MethodBase TargetMethodInfo => AccessTools.PropertyGetter(typeof(ThingRequest), nameof(ThingRequest.IsUndefined));
@@ -259,7 +259,7 @@ public class JobGiver_WorkPatches : ClassWithFishPatches
 			=> __instance.group == ThingRequestGroup.Undefined && !((FishCache)__instance.singleDef).IsSingleDef;
 	}
 
-	public class ThingRequest_CanBeFoundInRegion_Patch : FirstPriorityFishPatch
+	public sealed class ThingRequest_CanBeFoundInRegion_Patch : FirstPriorityFishPatch
 	{
 		public override string Description => "Part of the work scanning optimization";
 		public override MethodBase TargetMethodInfo => AccessTools.PropertyGetter(typeof(ThingRequest), nameof(ThingRequest.CanBeFoundInRegion));
@@ -276,7 +276,7 @@ public class JobGiver_WorkPatches : ClassWithFishPatches
 			|| (__instance.group != ThingRequestGroup.Undefined && (__instance.group == ThingRequestGroup.Nothing || __instance.group.StoreInRegion()));
 	}
 
-	public class ListerThings_ThingsMatching_Patch : FirstPriorityFishPatch
+	public sealed class ListerThings_ThingsMatching_Patch : FirstPriorityFishPatch
 	{
 		public override string Description => "Part of the work scanning optimization";
 		public override Expression<Action> TargetMethod => () => new ListerThings(default).ThingsMatching(default);

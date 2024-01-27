@@ -13,4 +13,5 @@ public interface IHasFishPatch
 {
 	public FishPatchHolder Patches { get; }
 	public bool RequiresLoadedGameForPatching { get; }
+	public bool ShowSettings { get; }
 }

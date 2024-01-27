@@ -134,7 +134,7 @@ public interface IAsyncCacheable<in TKey, in T2, TResult> : IAsyncCacheable<TRes
 	public ValueTask<TResult?> MakeResultAsync(TKey key, T2 second);
 }
 
-internal record Countdown(int Value)
+internal sealed record Countdown(int Value)
 {
 	public volatile int Value = Value;
 }

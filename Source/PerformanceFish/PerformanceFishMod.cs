@@ -41,11 +41,16 @@ using PerformanceFish.Prepatching;
 namespace PerformanceFish;
 
 [PublicAPI]
-public class PerformanceFishMod : Mod
+public sealed class PerformanceFishMod : Mod
 {
-	public const string NAME = "Performance Fish";
-	public const string PACKAGE_ID = PackageIDs.PERFORMANCE_FISH;
+	public const string
+		NAME = "Performance Fish",
+		PACKAGE_ID = PackageIDs.PERFORMANCE_FISH;
+	
+	[Obsolete("I am not incrementing this version number")]
 	public const decimal VERSION = 0.4M;
+
+	public static Version LoadedVersion => typeof(PerformanceFishMod).Assembly.GetLoadedVersion();
 
 	public static FishSettings? Settings { get; internal set; }
 	public static PerformanceFishMod? Mod { get; private set; }
@@ -53,15 +58,38 @@ public class PerformanceFishMod : Mod
 	public static IHasFishPatch[]? AllPatchClasses { get; internal set; }
 	public static ClassWithFishPrepatches[]? AllPrepatchClasses { get; internal set; }
 
+	private static FishPatch[]? _allFishPatches;
+
+	private static FishPrepatchBase[]? _allFishPrepatches;
+
+	public static IEnumerable<FishPatch> AllHarmonyPatches
+		=> _allFishPatches ??= AllPatchClasses?.SelectMany(static patchClass => patchClass.Patches.All.Values).ToArray()
+			?? Array.Empty<FishPatch>();
+
+	public static IEnumerable<FishPrepatchBase> AllPrepatches
+		=> _allFishPrepatches ??= AllPrepatchClasses?.SelectMany(static patchClass => patchClass.Patches.All.Values)
+				.ToArray()
+			?? Array.Empty<FishPrepatchBase>();
+
 	public PerformanceFishMod(ModContentPack content) : base(content)
 	{
-		ActiveMods.CheckRequirements();
+		try
+		{
+			ActiveMods.CheckRequirements();
+		}
+		catch (Exception e)
+		{
+			Log.Error(e.ToString());
+			ApplyModInactiveLetterPatch();
+			return;
+		}
+		
 		InitializeMod();
 	}
 
 	private void InitializeMod()
 	{
-		DebugLog.Message($"Initializing {NAME} v{VERSION}");
+		DebugLog.Message($"Initializing {NAME} v{typeof(PerformanceFishMod).Assembly.GetLoadedVersion()}");
 
 		// ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
 		if (Mod != null)
@@ -79,20 +107,46 @@ public class PerformanceFishMod : Mod
 			Log.Error("Prepatcher mod is missing. Performance Fish will not be working correctly in this state.");
 		}
 
-		modSettings = Settings;
-		modSettings!.Mod = this;
+		if (ActiveMods.TryGetModContentPack(PackageIDs.PREPATCHER) is not { } prepatcherContent
+			|| prepatcherContent.assemblies?.loadedAssemblies is not [_,..])
+		{
+			Verse.Log.TryOpenLogWindow();
+			Log.Error("Prepatcher assemblies are missing. This usually indicates an incomplete download or a "
+				+ "copy of github sources instead of the actual mod.");
+		}
 
 		if (!OnAssembliesLoaded.Loaded)
 		{
 			Verse.Log.TryOpenLogWindow();
 			Log.Error("Performance Fish failed to initialize entirely. There are either critical dependencies "
 				+ "missing or mods with hard incompatibilities present.");
+			ApplyModInactiveLetterPatch();
+		}
+
+		modSettings = Settings;
+		if (modSettings is null)
+		{
+			Verse.Log.TryOpenLogWindow();
+			Log.Error("Performance Fish failed to initialize its mod settings.");
+		}
+		else
+		{
+			modSettings.Mod = this;
 		}
 
 #if DEBUG
 		LogPatchCount();
 #endif
 	}
+
+	private static void ApplyModInactiveLetterPatch()
+		=> Harmony.Patch(AccessTools.DeclaredMethod(typeof(Game), nameof(Game.FinalizeInit)),
+			postfix: new(methodof(ThrowModInactiveLetter), Priority.Last));
+
+	public static void ThrowModInactiveLetter()
+		=> Find.LetterStack.AddLetterSilently(LetterMaker.MakeLetter("Performance Fish inactive",
+			"Missing dependencies or hard incompatibilities caused Performance Fish to entirely fail to "
+			+ "initialize. It will not be doing anything in this state.", LetterDefOf.Bossgroup));
 
 	public static void LogPatchCount()
 	{
@@ -135,7 +189,14 @@ public class PerformanceFishMod : Mod
 		var types = Assembly.GetExecutingAssembly().GetTypes();
 		var list = new List<T>(types.Length);
 
-		Parallel.ForEach(types, type =>
+		if (typeof(T).IsAssignableTo(typeof(FishPatch)))
+			Parallel.ForEach(types, InitializePatchClass);
+		else
+			Array.ForEach(types, InitializePatchClass);
+
+		return list.ToArray();
+		
+		void InitializePatchClass(Type type)
 		{
 			if (!type.IsAssignableTo(typeof(T))
 				|| type.IsInterface
@@ -147,7 +208,7 @@ public class PerformanceFishMod : Mod
 			try
 			{
 				var patchClass = SingletonFactory<T>.Get(type);
-				
+
 				lock (((ICollection)list).SyncRoot)
 					list.Add(patchClass);
 			}
@@ -155,9 +216,7 @@ public class PerformanceFishMod : Mod
 			{
 				Log.Error($"{NAME} encountered an exception while trying to initialize {type.Name}:\n{ex}");
 			}
-		});
-		
-		return list.ToArray();
+		}
 	}
 
 	public static T? Get<T>()

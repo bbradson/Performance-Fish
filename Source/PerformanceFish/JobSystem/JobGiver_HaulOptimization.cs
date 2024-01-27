@@ -7,22 +7,21 @@ using PerformanceFish.ModCompatibility;
 
 namespace PerformanceFish.JobSystem;
 
-public class JobGiver_HaulOptimization : ClassWithFishPatches
+public sealed class JobGiver_HaulOptimization : ClassWithFishPatches
 {
-	public class PotentialWorkThingsGlobal_Patch : FishPatch
+	public sealed class PotentialWorkThingsGlobal_Patch : FishPatch
 	{
+		public override List<string> IncompatibleModIDs { get; } = [PackageIDs.MULTIPLAYER];
+
 		public override string Description { get; }
 			= "Sorts haulables by distance before running expensive hauling calculations on them to avoid checks on "
-				+ "far away items";
+			+ "far away items";
 
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.Method(typeof(JobGiver_Haul), nameof(JobGiver_Haul.TryGiveJob));
 
 		public static CodeInstructions? Transpiler(CodeInstructions codes, MethodBase method)
 		{
-			if (ActiveMods.Multiplayer) // PUAH has known issues with sorting and multiplayer
-				return codes;
-			
 			var pawn_Map_listerHaulables_ThingsPotentiallyNeedingHauling
 				= FishTranspiler.Call(static () => default(ListerHaulables)!.ThingsPotentiallyNeedingHauling());
 

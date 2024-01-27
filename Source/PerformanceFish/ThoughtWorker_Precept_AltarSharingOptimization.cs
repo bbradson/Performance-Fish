@@ -9,9 +9,9 @@ using SharedAltarCache
 
 namespace PerformanceFish;
 
-public class ThoughtWorker_Precept_AltarSharingOptimization : ClassWithFishPatches
+public sealed class ThoughtWorker_Precept_AltarSharingOptimization : ClassWithFishPatches
 {
-	public class SharedAltar_Patch : FirstPriorityFishPatch
+	public sealed class SharedAltar_Patch : FirstPriorityFishPatch
 	{
 		public override string Description { get; }
 			= "Caches results of ideology's shared altar thoughtworker and throttles it to wait a minimum of 128 ticks "
@@ -23,7 +23,7 @@ public class ThoughtWorker_Precept_AltarSharingOptimization : ClassWithFishPatch
 		public static bool Prefix(ThoughtWorker_Precept_AltarSharing __instance, Pawn pawn, ref Thing? __result,
 			out bool __state)
 		{
-			if (!pawn.Spawned)
+			if (!pawn.IsSpawned())
 			{
 				__result = null;
 				return __state = false;
@@ -60,7 +60,7 @@ public class ThoughtWorker_Precept_AltarSharingOptimization : ClassWithFishPatch
 			thing = result;
 			_nextLateRefreshTick = TickHelper.Add(3072, pawn.thingIDNumber, 2048);
 			_nextEarlyRefreshTick = TickHelper.Add(128, pawn.thingIDNumber, 128);
-			_lister = pawn.Map.listerThings;
+			_lister = pawn.GetMap().listerThings;
 			_allStructuresListVersion = _lister.listsByGroup[(int)ThingRequestGroup.BuildingArtificial]._version;
 		}
 

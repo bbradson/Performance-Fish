@@ -32,6 +32,8 @@ public static class OnAssembliesLoaded
 		TryInitialize(AnalyzerFixes.Patch, true);
 		
 		_ = FishSettings.Instance;
+		
+		PerformanceFishMod.AllPrepatchClasses.BeforeHarmonyPatching();
 
 		Parallel.ForEach(PerformanceFishMod.AllPatchClasses, static patchClass =>
 		{
@@ -46,6 +48,10 @@ public static class OnAssembliesLoaded
 					patchClass.GetType().Name}:\n{ex}");
 			}
 		});
+		
+		PerformanceFishMod.AllPrepatchClasses.OnPatchingCompleted();
+
+		Cache.Utility.Initialize();
 	}
 
 	private static void TryPatchGraphicsSetter()

@@ -8,5 +8,8 @@ namespace PerformanceFish.Utility;
 public static class StringExtensions
 {
 	public static bool NameEqualsCaseInsensitive(this MethodInfo methodInfo, string name)
-		=> methodInfo.Name.Equals(name, StringComparison.InvariantCultureIgnoreCase);
+		=> methodInfo.Name.Equals(name, StringComparison.OrdinalIgnoreCase);
+
+	public static string AppendWhen(this string instance, bool predicate, string text)
+		=> predicate ? instance + text : instance;
 }

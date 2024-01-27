@@ -7,9 +7,9 @@ using System.Linq;
 
 namespace PerformanceFish;
 
-public class AccessToolsCaching : ClassWithFishPatches
+public sealed class AccessToolsCaching : ClassWithFishPatches
 {
-	public class AllTypes : FishPatch
+	public sealed class AllTypes : FishPatch
 	{
 		public override string? Description { get; } = "Caches AccessTools.AllTypes to only recalculate when the "
 			+ "loaded assembly count changes. Improves load times.";

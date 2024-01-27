@@ -15,5 +15,19 @@ public abstract class ClassWithFishPatches : SingletonFactory<ClassWithFishPatch
 	public virtual FishPatchHolder Patches { get; }
 	public virtual bool RequiresLoadedGameForPatching => false;
 
+	public virtual bool ShowSettings
+	{
+		get
+		{
+			foreach (var patch in Patches)
+			{
+				if (patch.ShowSettings)
+					return true;
+			}
+
+			return false;
+		}
+	}
+
 	protected ClassWithFishPatches() => Patches = new(GetType());
 }

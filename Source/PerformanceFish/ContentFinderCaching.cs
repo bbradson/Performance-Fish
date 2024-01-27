@@ -7,9 +7,9 @@ using PerformanceFish.Prepatching;
 
 namespace PerformanceFish;
 
-public class ContentFinderCaching : ClassWithFishPrepatches
+public sealed class ContentFinderCaching : ClassWithFishPrepatches
 {
-	public class Get_Patch : FishPrepatch
+	public sealed class Get_Patch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Caches texture lookups on the ContentFinder. This has a relatively large performance impact when used "

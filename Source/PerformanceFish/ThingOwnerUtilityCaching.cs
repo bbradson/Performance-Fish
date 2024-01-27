@@ -10,10 +10,18 @@ using PerformanceFish.Prepatching;
 
 namespace PerformanceFish;
 
-public class ThingOwnerUtilityPreCaching : ClassWithFishPrepatches
+public sealed class ThingOwnerUtilityPreCaching : ClassWithFishPrepatches
 {
-	public class GetAllThingsRecursively_Patch : FishPrepatch
+	public sealed class GetAllThingsRecursively_Patch : FishPrepatch
 	{
+		// https://github.com/jptrrs/HumanResources/blob/master/Source/Harmony/ThingOwnerUtility_GetAllThingsRecursively.cs
+		// Harmony patches on generics like there strip out information from the generic T argument, due to harmony
+		// replacing the method with one made with Reflection.Emit
+		// noted down as known edge case on the harmony wiki here:
+		// https://harmony.pardeike.net/articles/patching-edgecases.html#generics
+		public override List<string> IncompatibleModIDs { get; }
+			= [ModCompatibility.PackageIDs.HUMAN_RESOURCES];
+
 		public override string Description { get; }
 			= "Caching of information about mostly unspawned pawns and things. Relatively large performance impact";
 
@@ -82,9 +90,9 @@ public class ThingOwnerUtilityPreCaching : ClassWithFishPrepatches
 			+ (map.listerThings.listsByGroup[(int)ThingRequestGroup.ThingHolder]?.Count ?? 0);
 }
 
-/*public class ThingOwnerUtilityCaching : ClassWithFishPatches
+/*public sealed class ThingOwnerUtilityCaching : ClassWithFishPatches
 {
-	public class GetAllThingsRecursively_Patch : FishPatch
+	public sealed class GetAllThingsRecursively_Patch : FishPatch
 	{
 		public override string Description { get; }
 			= "Caching of information about mostly unspawned pawns and things. Relatively large performance impact";

@@ -12,9 +12,9 @@ using ImmunityRecordExistsCache
 
 namespace PerformanceFish.Hediffs;
 
-public class ImmunityHandlerCaching : ClassWithFishPatches
+public sealed class ImmunityHandlerCaching : ClassWithFishPatches
 {
-	public class NeededImmunitiesNow : FirstPriorityFishPatch
+	public sealed class NeededImmunitiesNow : FirstPriorityFishPatch
 	{
 		public override string Description { get; }
 			= "Caches results of the ImmunityHandler.NeededImmunitiesNow method. Impact scales with hediff quantity.";
@@ -54,7 +54,7 @@ public class ImmunityHandlerCaching : ClassWithFishPatches
 				.Update(__instance.pawn.health.hediffSet, __result);
 	}
 
-	public class ImmunityRecordExists : FishPatch
+	public sealed class ImmunityRecordExists : FishPatch
 	{
 		public override string? Description { get; } = "Required by the TryAddImmunityRecord optimization.";
 
@@ -82,7 +82,7 @@ public class ImmunityHandlerCaching : ClassWithFishPatches
 		}
 	}
 
-	public class TryAddImmunityRecord : FishPatch
+	public sealed class TryAddImmunityRecord : FishPatch
 	{
 		public override string? Description { get; }
 			= "Optimization for this specific method to not run more checks than necessary.";
@@ -113,9 +113,9 @@ public class ImmunityHandlerCaching : ClassWithFishPatches
 	public record struct ImmunityInfoCacheValue
 	{
 		private int _version = -1;
-		private List<Hediff> _hediffsInSet = new();
+		private List<Hediff> _hediffsInSet = [];
 		private int _nextRefreshTick;
-		public List<ImmunityHandler.ImmunityInfo> Infos = new();
+		public List<ImmunityHandler.ImmunityInfo> Infos = [];
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public void Update(HediffSet set, List<ImmunityHandler.ImmunityInfo> infos)

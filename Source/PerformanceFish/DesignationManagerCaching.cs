@@ -16,9 +16,9 @@ using DesignationsOfDefCache =
 
 namespace PerformanceFish;
 
-public class DesignationManagerCaching : ClassWithFishPatches
+public sealed class DesignationManagerCaching : ClassWithFishPatches
 {
-	public class SpawnedDesignationsOfDef_Patch : FishPatch
+	public sealed class SpawnedDesignationsOfDef_Patch : FishPatch
 	{
 		public override string Description => "Designation caching";
 
@@ -62,7 +62,7 @@ public class DesignationManagerCaching : ClassWithFishPatches
 		dict[new(instance, key)] = cache;
 	}
 
-	public class AnySpawnedDesignationOfDef_Patch : FishPatch
+	public sealed class AnySpawnedDesignationOfDef_Patch : FishPatch
 	{
 		public override string Description => "Designation caching";
 
@@ -76,7 +76,7 @@ public class DesignationManagerCaching : ClassWithFishPatches
 			=> Reflection.GetCodeInstructions(AnySpawnedDesignationOfDef);
 	}
 
-	public class AllDesignationsOn_Patch : FishPatch
+	public sealed class AllDesignationsOn_Patch : FishPatch
 	{
 		public override string Description => "Designation caching";
 		public override Expression<Action> TargetMethod => () => default(DesignationManager)!.AllDesignationsOn(null);
@@ -99,7 +99,7 @@ public class DesignationManagerCaching : ClassWithFishPatches
 		}
 	}
 
-	public class DesignationOn_Patch : FishPatch
+	public sealed class DesignationOn_Patch : FishPatch
 	{
 		public override string Description => "Designation caching";
 		public override Expression<Action> TargetMethod => () => default(DesignationManager)!.DesignationOn(null);
@@ -111,7 +111,7 @@ public class DesignationManagerCaching : ClassWithFishPatches
 			=> Reflection.GetCodeInstructions(DesignationOn);
 	}
 
-	public class DesignationOn_ByDef_Patch : FishPatch
+	public sealed class DesignationOn_ByDef_Patch : FishPatch
 	{
 		public override string Description => "Designation caching";
 		public override Expression<Action> TargetMethod => () => default(DesignationManager)!.DesignationOn(null, null);
@@ -149,7 +149,7 @@ public class DesignationManagerCaching : ClassWithFishPatches
 			=> Reflection.GetCodeInstructions(DesignationOn);
 	}
 
-	public class HasMapDesignationOn_Patch : FishPatch
+	public sealed class HasMapDesignationOn_Patch : FishPatch
 	{
 		public override string Description => "Designation caching";
 		public override Expression<Action> TargetMethod => () => default(DesignationManager)!.HasMapDesignationOn(null);

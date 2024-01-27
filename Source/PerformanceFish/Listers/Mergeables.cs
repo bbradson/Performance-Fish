@@ -3,6 +3,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+#if bad
+
 global using MergeablesCache
 	= PerformanceFish.Cache.ByReference<Verse.Thing, RimWorld.ListerMergeables,
 		PerformanceFish.Listers.Mergeables.MergeablesCacheValue>;
@@ -10,10 +12,21 @@ using PerformanceFish.Cache;
 
 namespace PerformanceFish.Listers;
 
-public class Mergeables : ClassWithFishPatches
+public sealed class Mergeables : ClassWithFishPatches
 {
-	public class Check_Patch : FishPatch
+	public sealed class Check_Patch : FishPatch
 	{
+		protected internal override void OnPatchingCompleted()
+		{
+			Hauling.StorageSettingsPatches.TryNotifyChanged_Patch.Changed += _ => MergeablesCache.Get.Clear();
+
+			Events.ThingEvents.Initialized += thing =>
+			{
+				if (thing is IHaulDestination)
+					thing.Events().Destroying += _ => MergeablesCache.Get.Clear();
+			};
+		}
+		
 		public override string Description { get; } = "Optimization for mergeables checking";
 		public override Expression<Action> TargetMethod { get; } = static () => default(ListerMergeables)!.Check(null);
 
@@ -46,7 +59,7 @@ public class Mergeables : ClassWithFishPatches
 			=> Reflection.MakeReplacementCall(Check);
 	}
 
-	public class CheckAdd_Patch : FishPatch
+	public sealed class CheckAdd_Patch : FishPatch
 	{
 		public override string Description { get; } = "Part of the ListerMergeables optimization";
 
@@ -70,7 +83,7 @@ public class Mergeables : ClassWithFishPatches
 			=> Reflection.MakeReplacementCall(CheckAdd);
 	}
 
-	public class TryRemove_Patch : FishPatch
+	public sealed class TryRemove_Patch : FishPatch
 	{
 		public override string Description { get; } = "Part of the ListerMergeables optimization";
 
@@ -79,16 +92,16 @@ public class Mergeables : ClassWithFishPatches
 
 		public static void TryRemove(ListerMergeables instance, Thing t)
 		{
-			if (t.def.category == ThingCategory.Item)
-			{
-				ref var cache = ref MergeablesCache.GetAndCheck<MergeablesCacheValue>(t, instance);
+			if (!t.IsItem())
+				return;
 
-				if (!cache.Contains)
-					return;
+			ref var cache = ref MergeablesCache.GetAndCheck<MergeablesCacheValue>(t, instance);
 
-				instance.mergeables.Remove(t);
-				cache.SetValue(false, t);
-			}
+			if (!cache.Contains)
+				return;
+
+			instance.mergeables.Remove(t);
+			cache.SetValue(false, t);
 		}
 
 		public static CodeInstructions Transpiler(CodeInstructions codeInstructions)
@@ -122,3 +135,4 @@ public class Mergeables : ClassWithFishPatches
 		}
 	}
 }
+#endif

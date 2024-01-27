@@ -15,17 +15,31 @@ public static class AnalyzerFixes
 {
 	public static void Patch()
 	{
-		var modBase = AccessTools.Constructor(Reflection.Type("PerformanceAnalyzer", "Analyzer.Modbase"),
-			new[] { typeof(ModContentPack) });
-		if (modBase is null)
-			return /*false*/;
+		var entryPoint = AccessTools.DeclaredMethod(ModCompatibility.Types.PerformanceAnalyzer.Window_Analyzer,
+				"LoadEntries") as MethodBase;
 
-		var success = PerformanceFishMod.Harmony!.Patch(modBase, postfix: new(methodof(XmlParser.CollectXmlData)))
-			!= null;
+		var prefixEntryPoint = false;
+		if (entryPoint != null)
+		{
+			prefixEntryPoint = true;
+		}
+		else
+		{
+			entryPoint = AccessTools.DeclaredConstructor(ModCompatibility.Types.PerformanceAnalyzer.ModBase,
+				[typeof(ModContentPack)]);
+		}
+		
+		if (entryPoint is null)
+			return /*false*/;
+		
+		var entryPatchMethod = new HarmonyMethod(methodof(XmlParser.CollectXmlData));
+
+		var success = PerformanceFishMod.Harmony!.Patch(entryPoint, prefix: prefixEntryPoint ? entryPatchMethod : null,
+			postfix: prefixEntryPoint ? null : entryPatchMethod) != null;
 
 		var methodTransplanting = Reflection.MethodInfo("PerformanceAnalyzer", "Analyzer.Profiling.MethodTransplanting",
 			"UpdateMethod",
-			new[] { typeof(Type), typeof(MethodInfo) });
+			[typeof(Type), typeof(MethodInfo)]);
 
 		if (methodTransplanting is null
 			|| PerformanceFishMod.Harmony.Patch(methodTransplanting, transpiler: new(methodof(UpdateMethod_Transpiler)))
@@ -145,7 +159,7 @@ public static class AnalyzerFixes
 
 	public static class OverridingMethodUtility
 	{
-		public static HashSet<MethodInfo> PatchedOverrides = new();
+		public static HashSet<MethodInfo> PatchedOverrides = [];
 
 		public static void ClearCaches() => PatchedOverrides.Clear();
 
@@ -247,7 +261,7 @@ public static class AnalyzerFixes
 
 	public static CodeInstructions Parse_Transpiler(CodeInstructions CodeInstructions)
 	{
-		var codes = CodeInstructions.ToList();
+		var codes = CodeInstructions.AsOrToList();
 		var parseMethod = FishTranspiler.Call("PerformanceAnalyzer", "Analyzer.Profiling.XmlParser", "ParseMethod");
 		var errorMethod = FishTranspiler.Call("PerformanceAnalyzer", "Analyzer.Profiling.ThreadSafeLogger", "Error");
 
@@ -357,7 +371,7 @@ public static class AnalyzerFixes
 
 	private static Action<int, object, Type> MakeGUIController_AddEntryMethod()
 	{
-		var analyzer_Profiling_EntryType = Reflection.Type("PerformanceAnalyzer", "Analyzer.Profiling.Entry");
+		var analyzer_Profiling_EntryType = ModCompatibility.Types.PerformanceAnalyzer.ProfilingEntry;
 		if (analyzer_Profiling_EntryType == null)
 			Log.Error("analyzer_Profiling_EntryType is null");
 
@@ -378,13 +392,13 @@ public static class AnalyzerFixes
 			Log.Error("entry_Create is null");*/
 
 		var dictionary_Add = AccessTools.Method(
-			typeof(Dictionary<,>).MakeGenericType(new[] { analyzer_Profiling_EntryType, typeof(Type) }),
-			"Add", new[] { analyzer_Profiling_EntryType, typeof(Type) });
+			typeof(Dictionary<,>).MakeGenericType([analyzer_Profiling_EntryType, typeof(Type)]),
+			"Add", [analyzer_Profiling_EntryType, typeof(Type)]);
 		if (dictionary_Add == null)
 			Log.Error("dictionary_Add is null");
 
 		var dynamicMethod = new DynamicMethod("GUIController_AddEntryMethod", typeof(void),
-			new[] { typeof(int), typeof(object), typeof(Type) });
+			[typeof(int), typeof(object), typeof(Type)]);
 		var il = dynamicMethod.GetILGenerator();
 
 		il.Emit(FishTranspiler.Argument(0));              //Category
@@ -416,6 +430,7 @@ public static class AnalyzerFixes
 	//Copied from Wiri's analyzer fork, with above fixes integrated. The steam version lacks this functionality
 	public static class XmlParser
 	{
+		[SuppressMessage("Security", "CA3075")]
 		public static void CollectXmlData()
 		{
 			foreach (var dir in ModLister.AllActiveModDirs)
@@ -484,7 +499,7 @@ public static class AnalyzerFixes
 			var type = DynamicTypeBuilder_CreateType(node.Name, methods);
 			
 			var entry = Entry_Create(node.Name, category, type, false, true);
-			if (tip != string.Empty)
+			if (!string.IsNullOrEmpty(tip))
 				Entry_tip(entry) = tip;
 
 			GUIController_AddSpecificEntry(category, entry, type);

@@ -8,6 +8,8 @@ using System.Diagnostics;
 using System.Linq;
 using nuget::JetBrains.Annotations;
 using PerformanceFish.Cache;
+using PerformanceFish.ModCompatibility;
+using PerformanceFish.Prepatching;
 
 namespace PerformanceFish.Patching;
 
@@ -15,11 +17,36 @@ namespace PerformanceFish.Patching;
 [UsedImplicitly(ImplicitUseTargetFlags.WithInheritors | ImplicitUseTargetFlags.WithMembers)]
 public abstract class FishPatch : SingletonFactory<FishPatch>, IExposable, IHasDescription
 {
+	private bool _enabled;
+
+	private string? _descriptionWithNotes;
+
+	private FishPrepatchBase[]? _resolvedLinkedPrepatches;
+	
+	private FishPatch[]? _resolvedLinkedHarmonyPatches;
+	
+	public virtual List<string> IncompatibleModIDs { get; } = [];
+
+	public virtual List<Type> LinkedPatches { get; } = [];
+
+	private FishPrepatchBase[] ResolvedLinkedPrepatches
+		=> _resolvedLinkedPrepatches ??= LinkedPatches
+			.Where(static type => type.IsAssignableTo(typeof(FishPrepatchBase)))
+			.Select(static type => FishPrepatchBase.Get(type))
+			.ToArray();
+
+	private FishPatch[] ResolvedLinkedHarmonyPatches
+		=> _resolvedLinkedHarmonyPatches ??= LinkedPatches
+			.Where(static type => type.IsAssignableTo(typeof(FishPatch))).Select(static type => Get(type))
+			.ToArray();
+
+	public bool DisabledForModCompatibility => ActiveMods.ContainsAnyOf(IncompatibleModIDs);
+	
 	public virtual bool ShouldBenchmark => false;
 
 	public virtual bool Enabled
 	{
-		get => _enabled;
+		get => _enabled && !DisabledForModCompatibility;
 		set
 		{
 			if (value == _enabled)
@@ -37,29 +64,44 @@ public abstract class FishPatch : SingletonFactory<FishPatch>, IExposable, IHasD
 				TryUnpatch();
 				ShouldBePatched = shouldBePatched;
 			}
+
+			for (var i = 0; i < ResolvedLinkedPrepatches.Length; i++)
+				ResolvedLinkedPrepatches[i].Enabled = value;
+
+			for (var i = 0; i < ResolvedLinkedHarmonyPatches.Length; i++)
+				ResolvedLinkedHarmonyPatches[i].Enabled = value;
 		}
 	}
-
-	private bool _enabled;
 
 	public virtual bool DefaultState
 	{
 		[Pure] get => true;
 	}
 
+	public virtual bool ShowSettings => true;
+
 	public virtual int PrefixMethodPriority => TryGetPriority(PrefixMethodInfo);
 	public virtual int PostfixMethodPriority => TryGetPriority(PostfixMethodInfo);
 	public virtual int TranspilerMethodPriority => TryGetPriority(TranspilerMethodInfo);
 	public virtual int FinalizerMethodPriority => TryGetPriority(FinalizerMethodInfo);
 	public MethodInfo? HarmonyMethodInfo => HarmonyMethodInfos.FirstOrDefault();
-	public List<MethodInfo> HarmonyMethodInfos { get; } = new();
+	public List<MethodInfo> HarmonyMethodInfos { get; } = [];
 	public MethodInfo? BenchmarkHarmonyMethodInfo => BenchmarkHarmonyMethodInfos.FirstOrDefault();
-	public List<MethodInfo> BenchmarkHarmonyMethodInfos { get; } = new();
+	public List<MethodInfo> BenchmarkHarmonyMethodInfos { get; } = [];
 	private bool Patched { get; set; }
 	private bool ShouldBePatched { get; set; }
 
 	public virtual string? Name => null;
+	
 	public virtual string? Description => null;
+
+	public string? DescriptionWithNotes
+		=> _descriptionWithNotes ??= !DisabledForModCompatibility
+			? Description
+			: Description
+			+ $"{(Description?.EndsWith(".") ?? true ? "" : ".")} Disabled for compatibility with {
+				IncompatibleModIDs.Select(static id => ActiveMods.TryGetModMetaData(id)?.Name)
+					.Where(static id => id != null).ToCommaList(true)}";
 
 	public virtual Delegate? TargetMethodGroup => null;
 	public virtual IEnumerable<Delegate>? TargetMethodGroups => null;
@@ -76,8 +118,8 @@ public abstract class FishPatch : SingletonFactory<FishPatch>, IExposable, IHasD
 			??= (TargetMethods?.Select(SymbolExtensions.GetMethodInfo)
 					?? TargetMethodGroups?.Select(static m => m.Method))?.Cast<MethodBase>().ToArray()
 				?? (TargetMethodInfo != null!
-					? new[] { TargetMethodInfo }
-					: Array.Empty<MethodBase>());
+					? [TargetMethodInfo]
+				: Array.Empty<MethodBase>());
 
 	private MethodBase[]? _targetMethodInfos;
 
@@ -102,7 +144,9 @@ public abstract class FishPatch : SingletonFactory<FishPatch>, IExposable, IHasD
 	public virtual MethodInfo? FinalizerMethodInfo
 		=> TryGetMethod("FINALIZER", static m => m.HasAttribute<HarmonyFinalizer>());
 
-	internal Type ParentType => GetType().DeclaringType;
+	internal Type ParentType
+		=> GetType().DeclaringType
+			?? ThrowHelper.ThrowArgumentNullException<Type>($"{this} is missing parent class. This is not supported");
 
 	internal IHasFishPatch? ParentClass
 		=> PerformanceFishMod.AllPatchClasses?.FirstOrDefault(patchClass => patchClass.GetType() == ParentType);
@@ -249,10 +293,14 @@ public abstract class FishPatch : SingletonFactory<FishPatch>, IExposable, IHasD
 
 	private static int TryGetPriority(MethodInfo? info)
 		=> info?.TryGetAttribute<HarmonyPriority>()?.info.priority ?? Priority.Normal;
+	
+	protected internal virtual void OnPatchingCompleted()
+	{
+	}
 
 	public virtual void ExposeData() => Scribe_Values.Look(ref _enabled, "enabled", DefaultState);
 
-	public override string ToString() => GetType().FullName;
+	public override string ToString() => GetType().FullName ?? GetType().Name;
 }
 
 internal static class Benchmarking
@@ -317,7 +365,7 @@ internal static class Benchmarking
 		}
 	}
 
-	public class Results
+	public sealed class Results
 	{
 		public int Count;
 		public Stopwatch? Stopwatch;

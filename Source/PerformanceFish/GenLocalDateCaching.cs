@@ -10,9 +10,9 @@ using System.Reflection.Emit;
 
 namespace PerformanceFish;
 
-public class GenLocalDateCaching : ClassWithFishPatches
+public sealed class GenLocalDateCaching : ClassWithFishPatches
 {
-	public class DayTickByThing_Patch : FishPatch
+	public sealed class DayTickByThing_Patch : FishPatch
 	{
 		public override string Description { get; }
 			= "Caches results of GenLocalDate.DayTick for the first map. This is similar to Rim73's mind state "
@@ -60,7 +60,7 @@ public class GenLocalDateCaching : ClassWithFishPatches
 		//}
 	}
 
-	public class DayTickByMap_Patch : FishPatch
+	public sealed class DayTickByMap_Patch : FishPatch
 	{
 		public override string Description { get; }
 			= "Caches results of GenLocalDate.DayTick for the first map. This is similar to Rim73's mind state "

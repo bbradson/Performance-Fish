@@ -10,9 +10,9 @@ using RimWorld.Planet;
 
 namespace PerformanceFish;
 
-public class GetCompCaching : ClassWithFishPrepatches
+public sealed class GetCompCaching : ClassWithFishPrepatches
 {
-	public class ThingCompPatch : FishPrepatch
+	public sealed class ThingCompPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Optimizes GetComp lookups with a fast custom dictionary implementation. This is often more than 10x "
@@ -73,7 +73,132 @@ public class GetCompCaching : ClassWithFishPrepatches
 		}
 	}
 	
-	public class HediffCompPatch : FishPrepatch
+	public sealed class ThingCompPropertiesPatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Optimizes GetCompProperties lookups with a fast custom dictionary implementation. This is often more "
+			+ "than 10x faster than the vanilla method. Replaces Performance Optimizer's error prone and slower "
+			+ "optimization.";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.Method(typeof(ThingDef), nameof(ThingDef.GetCompProperties));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(GetCompProperties<CompProperties>);
+
+		public static T? GetCompProperties<T>(ThingDef thingDef) where T : CompProperties
+		{
+			if (thingDef.comps != null)
+			{
+				ref var cache = ref Cache.ByInt<ThingDef, CacheValue<T>>.GetOrAddReference(thingDef.shortHash);
+				return !cache.IsDirty(thingDef.comps) ? cache.Comp : UpdateCache(thingDef, ref cache);
+			}
+			return null;
+		}
+		
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static T? UpdateCache<T>(ThingDef thingDef, ref CacheValue<T> cache)
+			where T : CompProperties
+		{
+			for (var i = 0; i < thingDef.comps.Count; i++)
+			{
+				if (thingDef.comps[i] is not T comp)
+					continue;
+
+				cache.Update(thingDef, comp);
+				return comp;
+			}
+
+			cache.Update(thingDef, null);
+			return null;
+		}
+
+		public record struct CacheValue<T> where T : CompProperties
+		{
+			private int _listVersion = -1;
+			public T? Comp;
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public bool IsDirty(List<CompProperties> comps) => comps._version != _listVersion;
+
+			[MethodImpl(MethodImplOptions.NoInlining)]
+			public void Update(ThingDef thingDef, T? comp)
+			{
+				if (thingDef.shortHash == default)
+					return;
+				
+				_listVersion = thingDef.comps._version;
+				Comp = comp;
+			}
+			
+			public CacheValue() {}
+		}
+	}
+	
+	public sealed class ThingDefHasCompPatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Optimizes HasComp lookups with a fast custom dictionary implementation. This is often more than 10x "
+			+ "faster than the vanilla method. Replaces Performance Optimizer's error prone and slower optimization.";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.Method(typeof(ThingDef), nameof(ThingDef.HasComp));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(HasComp);
+
+		public static bool HasComp(ThingDef thingDef, Type compType)
+		{
+			if (thingDef.comps != null)
+			{
+				ref var cache
+					= ref Cache.ByReference<ushort, RuntimeTypeHandle, CacheValue>.GetOrAddReference(thingDef.shortHash,
+						compType.TypeHandle);
+				
+				return !cache.IsDirty(thingDef.comps) ? cache.HasComp : UpdateCache(thingDef, compType, ref cache);
+			}
+			return false;
+		}
+		
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static bool UpdateCache(ThingDef thingDef, Type compType, ref CacheValue cache)
+		{
+			for (var i = 0; i < thingDef.comps.Count; i++)
+			{
+				if (thingDef.comps[i].compClass != compType)
+					continue;
+
+				cache.Update(thingDef, true);
+				return true;
+			}
+
+			cache.Update(thingDef, false);
+			return false;
+		}
+
+		public record struct CacheValue
+		{
+			private int _listVersion = -1;
+			public bool HasComp;
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public bool IsDirty(List<CompProperties> comps) => comps._version != _listVersion;
+
+			[MethodImpl(MethodImplOptions.NoInlining)]
+			public void Update(ThingDef thingDef, bool hasComp)
+			{
+				if (thingDef.shortHash == default)
+					return;
+				
+				_listVersion = thingDef.comps._version;
+				HasComp = hasComp;
+			}
+			
+			public CacheValue() {}
+		}
+	}
+	
+	public sealed class HediffCompPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Optimizes GetComp lookups with a fast custom dictionary implementation. This is often more than 10x "
@@ -134,7 +259,7 @@ public class GetCompCaching : ClassWithFishPrepatches
 		}
 	}
 	
-	public class HediffCompPropsPatch : FishPrepatch
+	public sealed class HediffCompPropsPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Optimizes GetComp lookups with a fast custom dictionary implementation. This is often more than 10x "
@@ -195,7 +320,7 @@ public class GetCompCaching : ClassWithFishPrepatches
 		}
 	}
 	
-	public class AbilityCompPatch : FishPrepatch
+	public sealed class AbilityCompPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Optimizes GetComp lookups with a fast custom dictionary implementation. This is often more than 10x "
@@ -256,7 +381,7 @@ public class GetCompCaching : ClassWithFishPrepatches
 		}
 	}
 	
-	public class WorldObjectCompPatch : FishPrepatch
+	public sealed class WorldObjectCompPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Optimizes GetComp lookups with a fast custom dictionary implementation. This is often more than 10x "
@@ -312,7 +437,7 @@ public class GetCompCaching : ClassWithFishPrepatches
 		}
 	}
 	
-	public class MapComponentPatch : FishPrepatch
+	public sealed class MapComponentPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Optimizes GetComp lookups with a fast custom dictionary implementation. This is often more than 10x "
@@ -368,7 +493,7 @@ public class GetCompCaching : ClassWithFishPrepatches
 		}
 	}
 	
-	public class WorldComponentPatch : FishPrepatch
+	public sealed class WorldComponentPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Optimizes GetComp lookups with a fast custom dictionary implementation. This is often more than 10x "
@@ -419,7 +544,7 @@ public class GetCompCaching : ClassWithFishPrepatches
 		}
 	}
 	
-	public class GameComponentPatch : FishPrepatch
+	public sealed class GameComponentPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Optimizes GetComp lookups with a fast custom dictionary implementation. This is often more than 10x "
