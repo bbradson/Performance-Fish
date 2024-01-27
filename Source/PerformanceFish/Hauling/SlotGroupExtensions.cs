@@ -18,7 +18,9 @@ public static class SlotGroupExtensions
 	public static bool ShouldHaveDistricts([NotNullWhen(true)] this SlotGroup? slotGroup, out int cellCountIfTrue,
 		out int totalSlotsIfTrue)
 	{
-		if (slotGroup is null || slotGroup.parent is Building { Spawned: false })
+		if (slotGroup is null
+			|| (slotGroup.parent is Building building
+				&& (!building.IsSpawned() || RimfactoryExtensionCacheValue.HasExtension(building))))
 		{
 			Unsafe.SkipInit(out cellCountIfTrue);
 			goto False;

@@ -9,17 +9,26 @@ public static class StorageExtensions
 {
 	public static int TrueItemsPerCell(this Thing slotGroupParent)
 		=> slotGroupParent.TrueItemsPerCell(slotGroupParent.TryGetLwmCompProperties());
-	
+
 	public static int TrueItemsPerCell(this Thing slotGroupParent, CompProperties? lwmProps)
-		=> lwmProps != null
-			? Math.Max(LwmCompCacheValue.LwmMinNumberStacks!(lwmProps), LwmCompCacheValue.LwmMaxNumberStacks!(lwmProps))
-			: slotGroupParent is Building building
-				? building.MaxItemsInCell
-				: 1;
+		=> Math.Max(lwmProps == null
+				? 0
+				: Math.Max(LwmCompCacheValue.LwmMinNumberStacks!(lwmProps),
+					LwmCompCacheValue.LwmMaxNumberStacks!(lwmProps)),
+			slotGroupParent is Building building ? building.MaxItemsInCell : 1);
+
+	public static int TrueTotalSlots(this Thing slotGroupParent, CompProperties? lwmProps,
+		DefModExtension? rimfactoryExtension)
+		=> Math.Max(rimfactoryExtension == null ? 0 : RimfactoryExtensionCacheValue.Limit!(rimfactoryExtension),
+			slotGroupParent.TrueItemsPerCell(lwmProps) * slotGroupParent.SlotGroupCellCount());
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static CompProperties? TryGetLwmCompProperties(this Thing thing)
 		=> LwmCompCache.GetOrAdd(thing).CompProperties;
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static DefModExtension? TryGetRimfactoryExtension(this Thing thing)
+		=> RimfactoryExtensionCache.GetOrAdd(thing).ModExtension;
 
 	public static int GetTotalSlots(this SlotGroup slotGroup) => slotGroup.GetTotalSlots(slotGroup.CellsList.Count);
 	
@@ -28,5 +37,9 @@ public static class StorageExtensions
 			? storage.TrueItemsPerCell() * cellCount
 			: cellCount;
 
-	static StorageExtensions() => LwmCompCacheValue.EnsureInitialized();
+	static StorageExtensions()
+	{
+		LwmCompCacheValue.EnsureInitialized();
+		RimfactoryExtensionCacheValue.EnsureInitialized();
+	}
 }

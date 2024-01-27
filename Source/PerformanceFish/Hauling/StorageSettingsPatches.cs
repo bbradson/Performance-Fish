@@ -149,9 +149,11 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 
 		private CompProperties? _lwmProps;
 
+		private DefModExtension? _rimfactoryExtension;
+
 		public event Action<StorageSettings>? SettingsChanged;
 
-		public int TotalSlots => _parent!.TrueItemsPerCell(_lwmProps) * _parent!.SlotGroupCellCount();
+		public int TotalSlots => _parent!.TrueTotalSlots(_lwmProps, _rimfactoryExtension);
 
 		public List<Thing> StoredThingsOfDef(ThingDef def) => _storedThingsByDef.GetOrAdd(def.shortHash);
 
@@ -167,6 +169,7 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 			_storedThingsByDef.Clear();
 			AllowedToAccept.Clear();
 			_lwmProps = slotGroupParent.TryGetLwmCompProperties();
+			_rimfactoryExtension = slotGroupParent.TryGetRimfactoryExtension();
 			FreeSlots = TotalSlots;
 		}
 

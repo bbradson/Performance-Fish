@@ -29,4 +29,9 @@ public static class Types
 	{
 		public static Type? CompProperties = Reflection.Type("LWM.DeepStorage.Properties");
 	}
+
+	public static class Rimfactory
+	{
+		public static Type? ModExtension = Reflection.Type("ProjectRimFactory.Storage.Editables.DefModExtension_Crate");
+	}
 }
