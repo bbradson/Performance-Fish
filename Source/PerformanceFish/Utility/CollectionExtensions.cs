@@ -5,7 +5,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using Mono.Collections.Generic;
 
 namespace PerformanceFish.Utility;
 
@@ -295,6 +294,17 @@ public static class CollectionExtensions
 		while (i < length);
 
 		return ThrowForNoElements<T>();
+	}
+	
+	public static unsafe void RemoveAtFastUnorderedUnsafe<T>(this List<T> list, int index)
+	{
+		fixed (T* lastBucket = &list._items[list._size - 1])
+		{
+			list[index] = *lastBucket;
+			*lastBucket = default;
+		}
+
+		list._size--;
 	}
 
 	public static List<T> AsOrToList<T>(this IEnumerable<T> enumerable) => enumerable as List<T> ?? enumerable.ToList();

@@ -137,7 +137,7 @@ public sealed class ThingOwnerOptimization : ClassWithFishPrepatches
 					: innerList.LastIndexOf((T)item);
 			
 			if (index >= 0)
-				innerList.RemoveAtFastUnordered(index);
+				innerList.RemoveAtFastUnorderedUnsafe(index);
 			
 			indexMap.Remove(itemKey);
 			
