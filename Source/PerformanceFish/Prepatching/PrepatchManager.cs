@@ -13,6 +13,7 @@ using Mono.Collections.Generic;
 using nuget::JetBrains.Annotations;
 using PerformanceFish.ModCompatibility;
 using CollectionExtensions = PerformanceFish.Utility.CollectionExtensions;
+using FieldAttributes = Mono.Cecil.FieldAttributes;
 using MethodBody = Mono.Cecil.Cil.MethodBody;
 
 namespace PerformanceFish.Prepatching;
@@ -28,6 +29,20 @@ public static class PrepatchManager
 		{
 			ThrowHelper.ThrowInvalidOperationException("Tried running free patches a second time. This should "
 				+ "never happen. Cancelling now to avoid further issues.");
+		}
+		
+		var gasFields = module.GetTypeDefinition(typeof(Gas))!.Fields;
+		if (gasFields.Any(static field => field.Name == VERIFICATION_FIELD_NAME))
+		{ // TODO: fix unity logger breaking when getting here
+			UnityEngine.Debug.Log("Detected second prepatch attempt. This is known to happen after using "
+				+ "Prepatcher's mod manager. Cancelling and restarting now to prevent issues");
+			GenCommandLine.Restart();
+		}
+		else
+		{
+			gasFields.Add(new(VERIFICATION_FIELD_NAME,
+				FieldAttributes.Private | FieldAttributes.Static | FieldAttributes.Literal,
+				module.TypeSystem.Byte));
 		}
 
 		Log.Message(LogPatches.PERFORMANCE_FISH_WELCOME_MESSAGE);
@@ -84,7 +99,9 @@ public static class PrepatchManager
 		Verse.Log.Message($"Performance Fish finished applying prepatches in {
 			stopwatch.ElapsedSecondsAccurate():N7} seconds");
 	}
-	
+
+	private const string VERIFICATION_FIELD_NAME = "PerformanceFishS1ngl3Pr3p4tchV3r1f1c4t10nF13ld";
+
 	// private static readonly FieldInfo? _monoAssemblyField = AccessTools.Field(typeof(Assembly), "_mono_assembly");
 	//
 	// internal static unsafe void SetReflectionOnly(Assembly asm, bool value, out bool previousValue)

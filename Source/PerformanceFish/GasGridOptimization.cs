@@ -8,6 +8,7 @@
 // #define GAS_DEBUG_L3 // individual cell changes
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -18,9 +19,6 @@ namespace PerformanceFish;
 
 public sealed class GasGridOptimization : ClassWithFishPrepatches
 {
-	// public static readonly List<ParallelGasGrid> ParallelGasGrids = new();
-	// public static GasGrid[] RegisteredGasGrids = Array.Empty<GasGrid>();
-
 	public sealed class SetDirectPatch : FishPrepatch
 	{
 		public override bool ShowSettings => false;
@@ -56,8 +54,6 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			typeof(Notify_ThingSpawnedPatch), typeof(ExposeDataPatch), typeof(MouseOverReadOutOnGUI),
 			typeof(DebugToolsGeneralPushGas)
 		];
-
-		// public static EventWaitHandle? WaitHandle { get; private set; }
 		
 		public static object? MonitorObject { get; private set; }
 		
@@ -65,8 +61,8 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			= "Optimizes the gas grid to utilize highly performant bit manipulation for much faster processing of "
 			+ "cells, usually in buckets of 64 simultaneously checked cells, and threading to process the different "
 			+ "gas types in parallel. Additionally exposes gas to xml through the PerformanceFish.GasDef type. "
-			+ "Performance impact scales with map size, but is generally large. Currently only utilizing single core "
-			+ "parallelism, threading is planned";
+			+ "Performance impact scales with map size, but is generally large. Threading requires the threading "
+			+ "enabled setting to be turned on. Default is off";
 
 		public override MethodBase TargetMethodBase { get; }
 			= AccessTools.DeclaredMethod(typeof(GasGrid), nameof(GasGrid.Tick));
@@ -76,102 +72,57 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 		
 		public static void ReplacementBody(GasGrid __instance)
 		{
-			// Parallel.For(0, ParallelGasGrids.Length, static i => ParallelGasGrids[i].Tick());
-			// (WaitHandle ?? Setup()).Set();
-
-			// if (!RegisteredGasGrids.Contains(__instance))
-			// 	Setup(__instance);
-
-			// ParallelNoAlloc.PulseRegisteredBackgroundWorkers(__instance.MonitorObject());
-
 			var gasGrids = __instance.ParallelGasGrids();
-
-			for (var i = 1; i < gasGrids.Length; i++)
-				gasGrids[i].Tick();
-
 			if (gasGrids.Length < 1)
 				return;
+
+			if (FishSettings.ThreadingEnabled
+				&& TryGetRegisteredGasGridWorkers(__instance, out var monitorObject))
+			{
+				TryPulseRegisteredGasGridWorkers(gasGrids, monitorObject);
+			}
+			else
+			{
+				for (var i = 1; i < gasGrids.Length; i++)
+					gasGrids[i].Tick();
+			}
 
 			var firstGasGrid = gasGrids[0];
 			firstGasGrid.Tick();
 			
 			__instance.cycleIndexDiffusion = firstGasGrid.CycleIndexDiffusion;
 			__instance.cycleIndexDissipation = firstGasGrid.CycleIndexDissipation;
+
+			if (FishSettings.ThreadingEnabled)
+				WaitForGasGridWorkers(gasGrids);
 		}
 
-		// [MemberNotNull(nameof(WaitHandle))]
-		// public static EventWaitHandle Setup()
-		// {
-		// 	WaitHandle = new ManualResetEvent(false);
-		// 	for (var i = ParallelGasGrids.Length; i-- > 1;)
-		// 	{
-		// 		var gasGrid = ParallelGasGrids[i];
-		// 		ThreadPool.RegisterWaitForSingleObject(WaitHandle, (_, _) => gasGrid.Tick(), null, -1, false);
-		// 	}
-		//
-		// 	return WaitHandle;
-		// }
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static bool TryGetRegisteredGasGridWorkers(GasGrid __instance,
+			[NotNullWhen(true)] out object? monitorObject)
+			=> (monitorObject = __instance.map.GasGridMonitorObject()) != null
+				&& ParallelNoAlloc.HasAnyRegisteredWorkers(monitorObject);
 
-// 		public static ParallelGasGrid[] Setup(GasGrid instance)
-// 		{
-// // 			lock (ParallelGasGrids)
-// // 			{
-// // 				if (RegisteredGasGrids.Contains(instance))
-// // 				{
-// // 					// only possible if 2 threads try registering the same gas grid instance. Rimthreaded? Maybe throw?
-// // 					SpinWait.SpinUntil(static () => MonitorObject != null);
-// // #pragma warning disable CS8774
-// // 					return;
-// // #pragma warning restore CS8774
-// // 				}
-// // 				
-// // 				RegisteredGasGrids = RegisteredGasGrids.Add(instance);
-// // 			}
-// 			
-// 			return new ParallelGasGrid[DefDatabase<GasDef>.DefCount];
-// 			
-// 			var gasDefsList = DefDatabase<GasDef>.AllDefsListForReading;
-//
-// 			var newGasGrids = new ParallelGasGrid[gasDefsList.Count];
-// 			try
-// 			{
-// 				for (var i = 0; i < newGasGrids.Length; i++)
-// 					newGasGrids[i] = new(instance.map, gasDefsList[i]);
-// 			
-// 				// ParallelGasGrids.AddRangeFast(newGasGrids);
-//
-// 				instance.MonitorObject() = ParallelNoAlloc.RegisterBackgroundWaitingWorkers(MakeTickActions(newGasGrids,
-// 					Math.Max(newGasGrids.Length - 1, 0), 1)); // 1st grid ticked on main thread
-// 			}
-// 			catch (Exception e)
-// 			{
-// 				Log.Error($"Caught exception in map with ID {instance.map.uniqueID} and hashCode {instance.map.GetHashCode()}: {e}");
-// 				return Array.Empty<ParallelGasGrid>();
-// 			}
-//
-// 			return newGasGrids;
-// 		}
-
-		private static Action[] MakeTickActions<T>(T gasGrids, int count, int startIndex)
-			where T : IList<ParallelGasGrid>
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static void TryPulseRegisteredGasGridWorkers(ParallelGasGrid[] gasGrids, object monitorObject)
 		{
-			var actions = new Action[count];
-			count += startIndex;
-			for (var i = startIndex; i < count; i++)
+			if (gasGrids.Length > 1)
+				ParallelNoAlloc.PulseRegisteredBackgroundWorkers(monitorObject);
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static void WaitForGasGridWorkers(ParallelGasGrid[] gasGrids)
+		{
+			if (gasGrids.Length <= 1)
+				return;
+
+			var currentTick = TickHelper.TicksGame;
+			for (var i = 1; i < gasGrids.Length;)
 			{
-				var gasGrid = gasGrids[i];
-				actions[i - startIndex] = () => gasGrid.Tick();
+				Thread.MemoryBarrier();
+				if (gasGrids[i].LastFinishedTick == currentTick)
+					i++;
 			}
-
-			return actions;
-		}
-
-		// for save-game compatibility. The two cycle indices get scribed with ExposeData
-		public static void AdvanceCycleIndex(ref int cycleIndex, int area, int increment)
-		{
-			cycleIndex += increment;
-			if (cycleIndex >= area)
-				cycleIndex = 0;
 		}
 	}
 
@@ -491,10 +442,13 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 	{
 		private ulong[] _gasCoverageForIndicesInRandomOrder;
 		private byte[] _gasDensity;
+		private volatile int _lastFinishedTick = -1;
 
 		public event Action<ParallelGasGrid>? Ticked;
 
 		public GasDef GasDef { get; private set; }
+
+		public int LastFinishedTick => _lastFinishedTick;
 		
 		public int DissipationRate => GasDef.dissipationRate;
 
@@ -783,8 +737,10 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 		
 		public void Tick()
 		{
-			if (!CalculateGasEffects)
+			try
 			{
+				if (!CalculateGasEffects)
+				{
 #if GAS_DEBUG_L1
 				if (CheckCurrentlyContainsGas())
 				{
@@ -792,34 +748,38 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 					Debug.LogIncorrectAnyGasEverAdded(this);
 				}
 #endif
-				
-				return;
-			}
-			
-			Ticked?.Invoke(this);
+					return;
+				}
 
-			var area = Map.Area;
-			// CellsInRandomOrder = Map.cellsInRandomOrder.GetAll();
-			// UpdateCellIndicesInRandomOrder();
-			// Assigned in PostInitialize instead. Ludeon was likely doing this due to component construction order in
-			// Map.ConstructComponents
+				Ticked?.Invoke(this);
+
+				var area = Map.Area;
+				// CellsInRandomOrder = Map.cellsInRandomOrder.GetAll();
+				// UpdateCellIndicesInRandomOrder();
+				// Assigned in PostInitialize instead. Ludeon was likely doing this due to component construction order in
+				// Map.ConstructComponents
 
 #if GAS_DEBUG_L2
 			using var previousDensity = new PooledArray<byte>(_gasDensity.Length);
 			Array.Copy(_gasDensity, 0, previousDensity.BackingArray, 0, _gasDensity.Length);
 #endif
 
-			_dissipationTicker.TickCells(area, (area + 63) >> 6); // Mathf.CeilToInt(area * (1f / 64f))
+				_dissipationTicker.TickCells(area, (area + 63) >> 6); // Mathf.CeilToInt(area * (1f / 64f))
 
-			if (Diffuses)
-				_diffusionTicker.TickCells(area, (area + 31) >> 5); // Mathf.CeilToInt(area * (1f / 32f))
+				if (Diffuses)
+					_diffusionTicker.TickCells(area, (area + 31) >> 5); // Mathf.CeilToInt(area * (1f / 32f))
 
 #if GAS_DEBUG_L2
 			Debug.LogTotalGasChange(this, previousDensity);
 #endif
 
-			if (Map.IsHashIntervalTick(600))
-				RecalculateEverHadGas();
+				if (Map.IsHashIntervalTick(600))
+					RecalculateEverHadGas();
+			}
+			finally
+			{
+				_lastFinishedTick = TickHelper.TicksGame;
+			}
 		}
 
 		[MethodImpl(MethodImplOptions.NoInlining)]

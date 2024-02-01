@@ -51,7 +51,7 @@ public abstract class FishPrepatchBase : SingletonFactory<FishPrepatchBase>, IEx
 			: Description
 			+ $"{(Description?.EndsWith(".") ?? true ? "" : ".")} Disabled for compatibility with {
 				IncompatibleModIDs.Select(static id => ActiveMods.TryGetModMetaData(id)?.Name)
-					.Where(static id => id != null).ToCommaList(true)}";
+					.Where(Is.NotNull).ToCommaList(true)}";
 
 	public virtual string? Name => null;
 

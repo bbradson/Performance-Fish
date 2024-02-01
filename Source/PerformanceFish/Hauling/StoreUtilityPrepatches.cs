@@ -3,6 +3,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+// #define STORAGE_GROUP_DEBUG
+
+using System.Diagnostics;
+using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using PerformanceFish.Events;
@@ -89,13 +93,15 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 	{
 		public override List<Type> LinkedPatches { get; } =
 		[
-			typeof(SlotGroupPrepatches.Notify_AddedCellPatch), typeof(SlotGroupPrepatches.Notify_LostCellPatch)
+			typeof(SlotGroupPrepatches.Notify_AddedCellPatch), typeof(SlotGroupPrepatches.Notify_LostCellPatch),
+			typeof(StorageSettingsPatches.AllowedToAcceptPatch)
 		];
 
 		public override string? Description { get; }
 			= "Optimizes hauling by splitting storage areas into smaller regions with cached capacity information. "
 			+ "Additionally makes lookups more thorough when having the 'Improve hauling accuracy' setting enabled, "
-			+ "raising the odds of getting closer cells as haul destinations";
+			+ "raising the odds of getting closer cells as haul destinations. StorageSettingsPatches:AllowedToAccept "
+			+ "requires this patch due to shared caches";
 
 		public override MethodBase TargetMethodBase { get; }
 			= methodof(StoreUtility.TryFindBestBetterStoreCellForWorker);
@@ -109,6 +115,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			if (thing is ISlotGroupParent)
 			{
 				thingEvents.Spawned += NotifySlotGroupCellCountChanged;
+				thingEvents.Spawned += StorageSettingsPatches.InitializeSlotGroupParent;
 				thingEvents.DeSpawned += NotifySlotGroupCellCountChanged;
 			}
 
@@ -126,10 +133,20 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			=> slotGroupParent.GetSlotGroup()?.NotifyCellCountChanged();
 
 		public static void TryNotifyReceivedThing(Thing thing, Map map, in IntVec3 cell)
-			=> map.StorageDistrictGrid()[cell]?.AddThing(thing);
+		{
+			if (cell.GetSlotGroupParent(map) is { } parent and Thing)
+				parent.GetThingStoreSettings()?.Cache().Notify_ReceivedThing(thing);
+			
+			map.StorageDistrictGrid()[cell]?.AddThing(thing);
+		}
 
 		public static void TryNotifyLostThing(Thing thing, Map map, in IntVec3 cell)
-			=> map.StorageDistrictGrid()[cell]?.RemoveThing(thing);
+		{
+			if (cell.GetSlotGroupParent(map) is { } parent and Thing)
+				parent.GetThingStoreSettings()?.Cache().Notify_LostThing(thing);
+			
+			map.StorageDistrictGrid()[cell]?.RemoveThing(thing);
+		}
 
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
@@ -138,7 +155,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			bool needAccurateResult, ref IntVec3 closestSlot, ref float closestDistSquared,
 			ref StoragePriority foundPriority)
 		{
-			if (slotGroup == null || !slotGroup.parent.Accepts(t))
+			if (slotGroup == null || !slotGroup.parent.Accepts(t) || !CapacityAllows(slotGroup, t))
 				return;
 			
 			var thingPosition = t.SpawnedOrAnyParentSpawned ? t.PositionHeld : carrier.PositionHeld;
@@ -150,7 +167,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 					: 0;
 		
 		StartOfDistrictLoop:
-			var districts = slotGroup.Districts();
+			var districts = GetDistricts(slotGroup);
 			
 			for (var districtIndex = 0; districtIndex < districts.Length; districtIndex++)
 			{
@@ -186,6 +203,26 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 				}
 			}
 		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static StorageDistrict[] GetDistricts(SlotGroup slotGroup) => slotGroup.Districts();
+		// wrapper for analyzer compatibility, as it otherwise throws on ref returns
+		
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static bool CapacityAllows(SlotGroup slotGroup, Thing t)
+		{
+			var storageSettings = slotGroup.GetThingStoreSettings();
+			if (storageSettings?.owner is not Thing)
+				return true;
+
+			ref var cache = ref storageSettings.Cache();
+			StorageSettingsPatches.Debug.VerifyItemCount((Thing)storageSettings.owner, ref cache);
+			
+			return cache.FreeSlots > 0 || AcceptsForStacking(ref cache, t);
+		}
+
+		public static bool AcceptsForStacking(ref StorageSettingsPatches.StorageSettingsCache cache, Thing t)
+			=> cache.StoredThingsOfDef(t.def).ContainsThingStackableWith(t);
 	}
 
 	public sealed class TryFindBestBetterStoreCellForPatch : FishPrepatch
@@ -210,6 +247,11 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 				foundCell = IntVec3.Invalid;
 				return false;
 			}
+
+#if STORAGE_GROUP_DEBUG
+			if (!Debug.LoggedOnce && !(Current.Game?.tickManager?.Paused ?? true))
+				Debug.LogStuff(listInPriorityOrder);
+#endif
 			
 			var foundPriority = currentPriority;
 			var closestDistSquared = (float)int.MaxValue;
@@ -232,8 +274,38 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 
 				while (groupsOfPriorityCount-- > 0)
 				{
-					StoreUtility.TryFindBestBetterStoreCellForWorker(t, carrier, map, faction, listInPriorityOrder[i++],
-						needAccurateResult, ref closestSlot, ref closestDistSquared, ref foundPriority);
+					var slotGroup = listInPriorityOrder[i++];
+					int otherGroupMembers;
+					var storageGroup = slotGroup.TryGetStorageGroup();
+					if (storageGroup != null)
+					{
+						otherGroupMembers = storageGroup.MemberCount - 1;
+						Debug.VerifyStorageGroup(otherGroupMembers, listInPriorityOrder, i, storageGroup);
+						
+						groupsOfPriorityCount -= otherGroupMembers;
+						
+						if (!storageGroup.Accepts(t))
+						{
+							i += otherGroupMembers;
+							continue;
+						}
+					}
+					else
+					{
+						otherGroupMembers = 0;
+					}
+
+					while (true)
+					{
+						StoreUtility.TryFindBestBetterStoreCellForWorker(t, carrier, map, faction, slotGroup,
+							needAccurateResult, ref closestSlot, ref closestDistSquared, ref foundPriority);
+
+						if (otherGroupMembers <= 0)
+							break;
+						
+						otherGroupMembers--;
+						slotGroup = listInPriorityOrder[i++];
+					}
 				}
 			}
 
@@ -259,6 +331,40 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			
 			// remove for any storage instead of only valid storage to prevent further haul attempts until the next
 			// automatic ListerHaulablesTick cycle
+		}
+
+		public static class Debug
+		{
+			[Conditional("STORAGE_GROUP_DEBUG")]
+			public static void VerifyStorageGroup(int otherGroupMembers, List<SlotGroup> listInPriorityOrder, int i,
+				StorageGroup storageGroup)
+			{
+				for (var b = otherGroupMembers; b-- > 0;)
+				{
+					var otherSlotGroup = listInPriorityOrder[i + b];
+					if (otherSlotGroup.TryGetStorageGroup() == storageGroup)
+						continue;
+
+					Log.Error($"Incorrect haul destination order! Storage '{
+						otherSlotGroup.parent}' was expected to have Storage group '{storageGroup}', but had '{
+							otherSlotGroup.TryGetStorageGroup().ToStringSafe()}' instead");
+				}
+			}
+
+			[Conditional("STORAGE_GROUP_DEBUG")]
+			public static void LogStuff(List<SlotGroup> listInPriorityOrder)
+			{
+				LoggedOnce = true;
+				var storageGroups = listInPriorityOrder.Select(static slotGroup => slotGroup.TryGetStorageGroup())
+					.Where(Is.NotNull).Distinct().ToList();
+				Log.Message($"SlotGroup count: {listInPriorityOrder.Count}, StorageGroup count: {
+					storageGroups.Count}, slotGroups in storage groups: {
+						storageGroups.Select(static group => group!.MemberCount).Sum()}, outside of storage groups: {
+							listInPriorityOrder.Select(static slotGroup => slotGroup.TryGetStorageGroup())
+								.Where(Is.Null).Count()}");
+			}
+
+			public static bool LoggedOnce;
 		}
 	}
 

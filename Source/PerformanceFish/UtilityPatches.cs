@@ -49,6 +49,7 @@ public sealed class UtilityPatches : ClassWithFishPatches
 		public static void Postfix()
 		{
 			Cache.Utility.Clear();
+			ParallelNoAlloc.ClearAll();
 			foreach (var patch in PerformanceFishMod.AllPatchClasses!)
 			{
 				if (patch.RequiresLoadedGameForPatching)

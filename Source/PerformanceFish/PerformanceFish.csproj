@@ -17,7 +17,7 @@
 		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 		<Configurations>v1.4</Configurations>
-		<Version>0.3.999.8</Version>
+		<Version>0.3.999.9</Version>
 		<NoWarn>
 			1701;1702;IL2121;CS8500;CS9082;CA1000;CA1002;CA1003;CA1707;CA1010;CA1715;CA1716;CA1724;CA1031;CA1033;
 			CA1034;CA1043;CA1051;CA1305;CA1310;CA1710;CA1711;CA1810;CA1812;CA1819;CA1851;CA2002;CA5394;CA1725;CA1062

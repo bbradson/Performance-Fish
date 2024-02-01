@@ -100,6 +100,15 @@ public static class ParallelNoAlloc
 		return monitorObject;
 	}
 
+	public static bool HasAnyRegisteredWorkers(object? monitorObject)
+	{
+		Guard.IsNotNull(monitorObject);
+
+		return monitorObject is MonitorObject.Group typedMonitorObject
+			? typedMonitorObject.Subscribers.Length > 0
+			: ThrowHelper.ThrowArgumentException<bool>();
+	}
+
 	public static void DeregisterBackgroundWaitingWorker(object monitorObject, Action action)
 	{
 		Guard.IsNotNull(action);
@@ -139,6 +148,8 @@ public static class ParallelNoAlloc
 		
 		typedMonitorObject.Pulse();
 	}
+
+	internal static void ClearAll() => _groupWorkers.Clear();
 
 	private abstract class Worker : IFishPoolable
 	{
@@ -217,13 +228,10 @@ public static class ParallelNoAlloc
 
 			public void Invoke(Action action)
 			{
-				Guard.IsNotAssignableToType<MonitorObject.Group>(MonitorObject);
-			
 				if (Pulsed)
 					Spin();
-				
+
 				Action = action;
-			
 				MonitorObject.Pulse();
 			}
 

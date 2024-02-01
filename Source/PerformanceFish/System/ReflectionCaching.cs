@@ -3,6 +3,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection.Emit;
 using System.Runtime.InteropServices;
@@ -745,7 +746,7 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 				cache.Task = _fieldSetterFailureTask;
 				Log.Error($"FieldInfo.SetValue has been called on '{
 					info.FullDescription()}'. This is a const that gets copied at compile time. An attempt at "
-					+ $"setting a value will always fail.");
+					+ $"setting a value will always fail.\n{new StackTrace(true)}");
 				
 				return false;
 			}
@@ -778,7 +779,7 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 			{
 				Log.Error($"PerformanceFish failed to generate an optimized delegate for {
 					info.FullDescription()}. Reverting to default behaviour instead.\n{ex}\n{
-						Environment.StackTrace}");
+						new StackTrace(true)}");
 				return null;
 			}
 		}
@@ -821,8 +822,7 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 			catch (Exception ex)
 			{
 				Log.Error($"PerformanceFish failed to generate an optimized delegate for {
-					info.FullDescription()}. Reverting to default behaviour instead.\n{ex}\n{
-						Environment.StackTrace}");
+					info.FullDescription()}. Reverting to default behaviour instead.\n{ex}\n{new StackTrace(true)}");
 				return null;
 			}
 		}
@@ -960,7 +960,7 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 			{
 				Log.Warning($"PerformanceFish failed to generate an optimized delegate for {
 					Reflection.FullDescription(methodBase)}. Reverting to default behaviour instead.\n{ex}\n{
-						Environment.StackTrace}");
+						new StackTrace(true)}");
 				return null;
 			}
 		}

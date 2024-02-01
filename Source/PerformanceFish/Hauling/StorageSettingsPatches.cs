@@ -8,7 +8,6 @@
 using System.Diagnostics;
 using System.Linq;
 using FisheryLib.Pools;
-using PerformanceFish.Events;
 
 namespace PerformanceFish.Hauling;
 
@@ -17,63 +16,10 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 	public sealed class AllowedToAcceptPatch : FirstPriorityFishPatch
 	{
 		public override string Description { get; }
-			= "StorageSettings and capacity caching. High impact in colonies with multiple full storage buildings.";
+			= "Caches results of storage settings checks for things when hauling";
 
 		public override Expression<Action> TargetMethod { get; }
 			= static () => default(StorageSettings)!.AllowedToAccept(default(Thing));
-
-		protected internal override void OnPatchingCompleted() => ThingEvents.Initialized += TryRegister;
-
-		public static void TryRegister(Thing thing)
-		{
-			var thingEvents = thing.Events();
-
-			if (thing is ISlotGroupParent)
-				thingEvents.Spawned += InitializeSlotGroupParent;
-			
-			if (!thing.IsItem())
-				return;
-
-			thingEvents.RegisteredAtThingGrid += TryNotifyReceivedThing;
-			thingEvents.DeregisteredAtThingGrid += TryNotifyLostThing;
-		}
-
-		public static void TryNotifyReceivedThing(Thing thing, Map map, in IntVec3 cell)
-		{
-			if (cell.GetSlotGroupParent(map) is { } parent and Thing)
-				parent.GetStoreSettings()?.Cache().Notify_ReceivedThing(thing);
-		}
-
-		public static void TryNotifyLostThing(Thing thing, Map map, in IntVec3 cell)
-		{
-			if (cell.GetSlotGroupParent(map) is { } parent and Thing)
-				parent.GetStoreSettings()?.Cache().Notify_LostThing(thing);
-		}
-
-		public static void InitializeSlotGroupParent(Thing thing, Map map)
-		{
-			var slotGroupParent = (ISlotGroupParent)thing;
-			
-			if (slotGroupParent.GetStoreSettings() is not { } storeSettings)
-				return;
-
-			ref var cache = ref storeSettings.Cache();
-			cache.Initialize(thing);
-
-			var slotCellsList = slotGroupParent.AllSlotCellsList();
-			for (var i = slotCellsList.Count; i-- > 0;)
-			{
-				var thingsAtCell = slotCellsList[i].GetThingListUnchecked(map);
-				for (var j = thingsAtCell.Count; j-- > 0;)
-				{
-					var storedThing = thingsAtCell[j];
-					if (!storedThing.IsItem() || cache.Contains(storedThing))
-						continue;
-
-					cache.Notify_ReceivedThing(storedThing);
-				}
-			}
-		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool Prefix(StorageSettings __instance, Thing t, ref bool __result, out bool __state)
@@ -83,27 +29,10 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 			if (StorageSettingsCache.IsDirty(cachedAllowedToAcceptValue))
 				return __state = true;
 
-			__result = cachedAllowedToAcceptValue.AsBool() && CapacityAllows(__instance, t);
+			__result = cachedAllowedToAcceptValue.AsBool() /*&& CapacityAllows(__instance, t)*/;
 
 			return __state = false;
 		}
-
-		[MethodImpl(MethodImplOptions.NoInlining)]
-		public static bool CapacityAllows(StorageSettings __instance, Thing t)
-		{
-			if (__instance.owner is not Thing ownerThing)
-				return true;
-
-			ref var cache = ref __instance.Cache();
-			Debug.VerifyItemCount(ownerThing, ref cache);
-			
-			return cache.FreeSlots > 0
-				|| (t.TryGetMap() is { } map && t.Position.GetSlotGroupParent(map) == ownerThing)
-				|| AcceptsForStacking(ref cache, t);
-		}
-
-		public static bool AcceptsForStacking(ref StorageSettingsCache cache, Thing t)
-			=> cache.StoredThingsOfDef(t.def).ContainsThingStackableWith(t);
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static void Postfix(StorageSettings __instance, Thing t, bool __result, bool __state)
@@ -121,17 +50,60 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 
 	public sealed class TryNotifyChanged_Patch : FishPatch
 	{
+		public override List<Type> LinkedPatches { get; } = [typeof(AllowedToAcceptPatch)];
+
 		public static event Action<StorageSettings>? Changed;
 		
 		public override string Description { get; } = "StorageSettings cache resetting";
 
-		public override Expression<Action> TargetMethod { get; }
-			= static () => default(StorageSettings)!.TryNotifyChanged();
+		public override MethodBase? TargetMethodInfo { get; }
+			= AccessTools.DeclaredMethod(typeof(StorageSettings), nameof(StorageSettings.TryNotifyChanged));
 
 		public static void Postfix(StorageSettings __instance)
 		{
 			__instance.Cache().OnSettingsChanged(__instance);
+			
+			if (__instance.owner is StorageGroup group)
+				NotifyGroupMembers(group);
+			
 			Changed?.Invoke(__instance);
+		}
+
+		public static void NotifyGroupMembers(StorageGroup group)
+		{
+			var groupMembers = group.members;
+			for (var i = 0; i < groupMembers.Count; i++)
+			{
+				var thingStoreSettings = groupMembers[i].ThingStoreSettings;
+				thingStoreSettings.Cache().OnSettingsChanged(thingStoreSettings);
+			}
+		}
+	}
+	
+	public static void InitializeSlotGroupParent(Thing thing, Map map)
+	{
+		var slotGroupParent = (ISlotGroupParent)thing;
+			
+		slotGroupParent.TryGetGroupStoreSettings()?.Cache().Initialize(null);
+			
+		if (slotGroupParent.GetThingStoreSettings() is not { } storeSettings)
+			return;
+
+		ref var cache = ref storeSettings.Cache();
+		cache.Initialize(thing);
+
+		var slotCellsList = slotGroupParent.AllSlotCellsList();
+		for (var i = slotCellsList.Count; i-- > 0;)
+		{
+			var thingsAtCell = slotCellsList[i].GetThingListUnchecked(map);
+			for (var j = thingsAtCell.Count; j-- > 0;)
+			{
+				var storedThing = thingsAtCell[j];
+				if (!storedThing.IsItem() || cache.Contains(storedThing))
+					continue;
+
+				cache.Notify_ReceivedThing(storedThing);
+			}
 		}
 	}
 
@@ -153,7 +125,7 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 
 		public event Action<StorageSettings>? SettingsChanged;
 
-		public int TotalSlots => _parent!.TrueTotalSlots(_lwmProps, _rimfactoryExtension);
+		public int TotalSlots => _parent?.TrueTotalSlots(_lwmProps, _rimfactoryExtension) ?? 0xFFFFFFF;
 
 		public List<Thing> StoredThingsOfDef(ThingDef def) => _storedThingsByDef.GetOrAdd(def.shortHash);
 
@@ -163,13 +135,13 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 		public void Update(int thingIDNumber, bool allowedToAccept)
 			=> AllowedToAccept[thingIDNumber] = allowedToAccept.AsInt();
 
-		public void Initialize(Thing slotGroupParent)
+		public void Initialize(Thing? slotGroupParent)
 		{
 			_parent = slotGroupParent;
 			_storedThingsByDef.Clear();
 			AllowedToAccept.Clear();
-			_lwmProps = slotGroupParent.TryGetLwmCompProperties();
-			_rimfactoryExtension = slotGroupParent.TryGetRimfactoryExtension();
+			_lwmProps = slotGroupParent?.TryGetLwmCompProperties();
+			_rimfactoryExtension = slotGroupParent?.TryGetRimfactoryExtension();
 			FreeSlots = TotalSlots;
 		}
 

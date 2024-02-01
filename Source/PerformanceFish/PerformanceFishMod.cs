@@ -151,8 +151,8 @@ public sealed class PerformanceFishMod : Mod
 	public static void LogPatchCount()
 	{
 		var allFishPatches = AllPatchClasses!.SelectMany(static patchClass => patchClass.Patches.All.Values).ToList();
-		var allFishPrepatches
-			= AllPrepatchClasses!.SelectMany(static patchClass => patchClass.Patches.All.Values).ToList();
+		var allFishPrepatches = AllPrepatchClasses!.SelectMany(static patchClass => patchClass.Patches.All.Values)
+			.ToList();
 
 		var prefixCount = SumFor(allFishPatches, static fishPatch => fishPatch.PrefixMethodInfo);
 		var postfixCount = SumFor(allFishPatches, static fishPatch => fishPatch.PostfixMethodInfo);
@@ -174,10 +174,13 @@ public sealed class PerformanceFishMod : Mod
 						(prepatcherClassPatchCount == 1 ? "" : "es")}. That's a total of {prefixCount + postfixCount
 							+ transpilerCount + prepatcherPrefixCount + prepatcherPostfixCount
 							+ prepatcherTranspilerCount + prepatcherClassPatchCount} patches. Amazing!\n\n"
-			+ $"The following methods were patched:\n{string.Join("\n", allFishPatches.SelectMany(static fishPatch
-					=> fishPatch.TargetMethodInfos).Concat(allFishPrepatches.Select(static fishPrepatch
-				=> (fishPrepatch as FishPrepatch)?.TargetMethodBase)).Where(static method
-				=> method != null).Select(static method => method.FullDescription()))}\n"
+			+ $"The following methods were patched:\n{string.Join("\n",
+				allFishPatches
+					.SelectMany(static fishPatch => fishPatch.TargetMethodInfos)
+					.Concat(allFishPrepatches
+						.Select(static fishPrepatch => (fishPrepatch as FishPrepatch)?.TargetMethodBase))
+					.Where(Is.NotNull)
+					.Select(static method => method.FullDescription()))}\n"
 			+ $"===================================================================================");
 	}
 

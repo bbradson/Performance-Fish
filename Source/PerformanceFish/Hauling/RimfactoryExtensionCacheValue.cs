@@ -18,10 +18,12 @@ public record struct RimfactoryExtensionCacheValue
 			? slotGroupParent.def.modExtensions?.Find(_extensionPredicate)
 			: null;
 
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static bool HasExtension(Thing slotGroupParent)
-		=> RimfactoryTypes.ModExtension != null
-			&& (slotGroupParent.def.modExtensions?.Exists(_extensionPredicate)
-				?? false);
+		=> RimfactoryTypes.ModExtension != null && TestExtension(slotGroupParent);
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static bool TestExtension(Thing slotGroupParent) => slotGroupParent.TryGetRimfactoryExtension() != null;
 
 	static RimfactoryExtensionCacheValue() => EnsureInitialized();
 

@@ -50,4 +50,43 @@ public sealed class HaulDestinationManagerPatches : ClassWithFishPrepatches
 				__instance.Cache().OnPriorityChanged(__instance);
 		}
 	}
+	
+	public sealed class CompareSlotGroupPrioritiesDescendingPatch : FishPrepatch
+	{
+		public override List<Type> LinkedPatches { get; }
+			= [typeof(StoreUtilityPrepatches.TryFindBestBetterStoreCellForPatch)];
+
+		public override string? Description { get; }
+			= "Modifies storage sort order within the haul destination manager to put groups of linked storages first "
+			+ "within their priority, descending by size and then loadID. "
+			+ "StoreUtilityPrepatches:TryFindBestBetterStoreCellFor requires this";
+
+		public override MethodBase TargetMethodBase { get; }
+			= methodof(HaulDestinationManager.CompareSlotGroupPrioritiesDescending);
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static int Postfix(int __result, SlotGroup a, SlotGroup b)
+		{
+			if (__result != 0)
+				return __result;
+			
+			var storageSettingsGroupA = a.TryGetStorageGroup();
+			var storageSettingsGroupB = b.TryGetStorageGroup();
+
+			return storageSettingsGroupA == null
+				? storageSettingsGroupB == null
+					? 0
+					: 1
+				: storageSettingsGroupB == null
+					? -1
+					: CompareStorageSettingsGroups(storageSettingsGroupA, storageSettingsGroupB);
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static int CompareStorageSettingsGroups(StorageGroup a, StorageGroup b)
+		{
+			var result = b.MemberCount.CompareTo(a.MemberCount);
+			return result != 0 ? result : a.loadID.CompareTo(b.loadID);
+		}
+	}
 }

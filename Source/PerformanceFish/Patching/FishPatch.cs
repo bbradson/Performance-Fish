@@ -101,7 +101,7 @@ public abstract class FishPatch : SingletonFactory<FishPatch>, IExposable, IHasD
 			: Description
 			+ $"{(Description?.EndsWith(".") ?? true ? "" : ".")} Disabled for compatibility with {
 				IncompatibleModIDs.Select(static id => ActiveMods.TryGetModMetaData(id)?.Name)
-					.Where(static id => id != null).ToCommaList(true)}";
+					.Where(Is.NotNull).ToCommaList(true)}";
 
 	public virtual Delegate? TargetMethodGroup => null;
 	public virtual IEnumerable<Delegate>? TargetMethodGroups => null;

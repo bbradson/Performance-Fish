@@ -26,7 +26,7 @@ public sealed class FishSettings : ModSettings
 		if (!TryScribeVersion())
 			goto DoneLoading;
 
-		Scribe_Values.Look(ref _threadingEnabled, "ThreadingEnabled");
+		Scribe_Values.Look(ref ThreadingEnabled, "ThreadingEnabled");
 		Scribe_Values.Look(ref MothballEverything, "MothballEverything");
 		Scribe_Values.Look(ref ImproveHaulingAccuracy, "ImproveHaulingAccuracy", true);
 
@@ -204,6 +204,10 @@ public sealed class FishSettings : ModSettings
 		ls.CheckboxLabeled("Improve hauling accuracy", ref ImproveHaulingAccuracy, ImproveHaulingAccuracyDescription);
 		ls.Gap();
 		ls.CheckboxLabeled("Mothball everything", ref MothballEverything, MothballEverythingDescription);
+		ls.Gap();
+		ls.CheckboxLabeled("Allow threading", ref ThreadingEnabled, "Currently only affects the gas grid. "
+			+ "Experimental and disabled by default. Requires a high gas coverage on the map to outperform the single "
+			+ "threaded variant. Changes to this setting require a restart.");
 
 		ls.Gap();
 
@@ -317,23 +321,9 @@ public sealed class FishSettings : ModSettings
 
 	public static bool
 		MothballEverything,
-		ImproveHaulingAccuracy = true;
-
-	public static bool ThreadingEnabled
-	{
-		get => false; //_threadingEnabled;
-		set
-		{
-			if (value == _threadingEnabled)
-				return;
-
-			ThreadingPatches.ForEach(p => p.Enabled = value);
-			_threadingEnabled = value;
-		}
-	}
-
-	private static bool _threadingEnabled;
-	public static List<FishPatch> ThreadingPatches { get; } = [];
+		ImproveHaulingAccuracy = true,
+		ThreadingEnabled;
+	
 	private static Rect _scrollRect = new(0f, 0f, 500f, 9001f);
 	private static Vector2 _scrollPosition;
 

@@ -3,6 +3,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+using System.Diagnostics;
 using PerformanceFish.Prepatching;
 
 namespace PerformanceFish;
@@ -30,8 +31,7 @@ public sealed class UtilityPrepatches : ClassWithFishPrepatches
 			}
 			catch (Exception e)
 			{
-				Log.Error($"Exception caught within OnAssembliesLoaded:\n{e}\n{
-					Environment.StackTrace /*StackTraceUtility.ExtractStackTrace()*/}");
+				Log.Error($"Exception caught within OnAssembliesLoaded:\n{e}\n{new StackTrace(true)}");
 			}
 		}
 	}

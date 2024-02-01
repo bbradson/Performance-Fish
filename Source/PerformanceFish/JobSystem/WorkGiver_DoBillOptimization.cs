@@ -172,7 +172,7 @@ public sealed class WorkGiver_DoBillPrepatches : ClassWithFishPrepatches
 			}
 		}
 
-		private static readonly WorkGiver_DoBillOptimization.ThingPositionComparer _insertAtCorrectPositionComparer
+		private static readonly ThingPositionComparer _insertAtCorrectPositionComparer
 			= new();
 
 		public static void ActualLoop(List<Thing> list, Region r, Pawn pawn, Predicate<Thing> baseValidator,
@@ -597,16 +597,6 @@ public sealed class WorkGiver_DoBillOptimization : ClassWithFishPatches
 
 			cacheItem = new(cacheItem.Key, new(cacheItem.Value.Defs, true));
 		}
-	}
-
-	public sealed class ThingPositionComparer : IComparer<Thing>
-	{
-		public IntVec3 rootCell;
-
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public int Compare(Thing x, Thing y)
-			=> (x.Position - rootCell).LengthHorizontalSquared.CompareTo(
-				(y.Position - rootCell).LengthHorizontalSquared);
 	}
 
 	public record struct RecipeIngredientCacheValue

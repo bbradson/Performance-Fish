@@ -75,6 +75,11 @@ public static class PrepatcherFields
 	public static extern GasGridOptimization.ParallelGasGrid[] ParallelGasGrids(this GasGrid gasGrid);
 
 	[PrepatcherField]
+	[ValueInitializer(nameof(CreateGroupMonitorObject))]
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static extern object GasGridMonitorObject(this Map map);
+
+	[PrepatcherField]
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static extern ref Texture2D? ExpandingIconCache(this WorldObject worldObject);
 
@@ -151,6 +156,9 @@ public static class PrepatcherFields
 	public static Listers.Haulables.Cache CreateListerHaulablesCache() => new();
 	public static HaulDestinationManagerCache CreateHaulDestinationManagerCache() => new();
 
+	public static object CreateGroupMonitorObject()
+		=> ParallelNoAlloc.RegisterBackgroundWaitingWorkers(Array.Empty<Action>());
+
 	public static GasGridOptimization.ParallelGasGrid[] CreateParallelGasGridArray(GasGrid gasGrid)
 	{
 		DefDatabase<GasDef>.SetIndices();
@@ -184,6 +192,17 @@ public static class PrepatcherFields
 		var grids = new GasGridOptimization.ParallelGasGrid[gasDefs.Count];
 		for (var i = 0; i < grids.Length; i++)
 			grids[i] = new(map, gasDefs[i]);
+
+		if (FishSettings.ThreadingEnabled)
+		{
+			var monitorObject = map.GasGridMonitorObject();
+		
+			for (var i = 1; i < grids.Length; i++)
+			{
+				var grid = grids[i];
+				ParallelNoAlloc.RegisterBackgroundWaitingWorker(monitorObject, () => grid.Tick());
+			}
+		}
 
 		return grids;
 	}

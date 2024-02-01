@@ -29,10 +29,10 @@ public sealed class WorkGiver_HaulOptimization : ClassWithFishPatches
 
 		private static void Sort(List<Thing> list, Pawn pawn)
 		{
-			_comparer.rootCell = pawn.Position;
+			((ThingPositionComparer)_comparer.Target).rootCell = pawn.Position;
 			list.Sort(_comparer);
 		}
 
-		private static WorkGiver_DoBillOptimization.ThingPositionComparer _comparer = new();
+		private static Comparison<Thing> _comparer = new ThingPositionComparer().Compare;
 	}
 }

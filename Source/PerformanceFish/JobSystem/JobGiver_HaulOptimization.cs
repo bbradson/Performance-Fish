@@ -43,11 +43,11 @@ public sealed class JobGiver_HaulOptimization : ClassWithFishPatches
 
 		public static List<Thing> SortedThingsPotentiallyNeedingHauling(List<Thing> things, Pawn pawn)
 		{
-			_comparer.rootCell = pawn.Position;
+			((ThingPositionComparer)_comparer.Target).rootCell = pawn.Position;
 			things.Sort(_comparer);
 			return things;
 		}
 
-		private static WorkGiver_DoBillOptimization.ThingPositionComparer _comparer = new();
+		private static Comparison<Thing> _comparer = new ThingPositionComparer().Compare;
 	}
 }

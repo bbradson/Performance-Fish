@@ -3,6 +3,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+using System.Diagnostics;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
@@ -75,8 +76,7 @@ public abstract class FishPrepatch : FishPrepatchBase
 		}
 		catch (Exception e)
 		{
-			Log.Error($"Exception while applying transpiler for {GetType().FullName}\n{e}\n{
-				Environment.StackTrace /*StackTraceUtility.ExtractStackTrace()*/}");
+			Log.Error($"Exception while applying transpiler for {GetType().FullName}\n{e}\n{new StackTrace(true)}");
 		}
 
 		var patchVariables = new PatchVariables();
@@ -89,8 +89,7 @@ public abstract class FishPrepatch : FishPrepatchBase
 			}
 			catch (Exception e)
 			{
-				Log.Error($"Exception while applying prefix for {GetType().FullName}\n{e}\n{
-					Environment.StackTrace /*StackTraceUtility.ExtractStackTrace()*/}");
+				Log.Error($"Exception while applying prefix for {GetType().FullName}\n{e}\n{new StackTrace(true)}");
 			}
 		}
 
@@ -102,8 +101,7 @@ public abstract class FishPrepatch : FishPrepatchBase
 			}
 			catch (Exception e)
 			{
-				Log.Error($"Exception while applying postfix for {GetType().FullName}\n{e}\n{
-					Environment.StackTrace /*StackTraceUtility.ExtractStackTrace()*/}");
+				Log.Error($"Exception while applying postfix for {GetType().FullName}\n{e}\n{new StackTrace(true)}");
 			}
 		}
 		

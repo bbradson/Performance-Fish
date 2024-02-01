@@ -74,9 +74,11 @@ public unsafe struct FishStash : IEquatable<FishStash>
 
 	internal void InitializeActivePrepatchIDs()
 	{
-		var activePrepatches = PerformanceFishMod.AllPrepatchClasses!.SelectMany(static patchClass
-			=> patchClass.Patches.Where(static patch
-				=> patch.Enabled).Select(static patch => patch.IDNumber)).ToArray();
+		var activePrepatches = PerformanceFishMod.AllPrepatchClasses!
+			.SelectMany(static patchClass => patchClass.Patches
+				.Where(static patch => patch.Enabled)
+				.Select(static patch => patch.IDNumber))
+			.ToArray();
 
 		var activePrepatchCount = activePrepatches.Length;
 		_activePrepatchCount = activePrepatchCount;

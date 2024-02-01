@@ -29,8 +29,28 @@ public static class MiscExtensions
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static bool IsItem(this Thing thing) => thing.def.category == ThingCategory.Item;
 
+	public static StorageSettings? TryGetGroupStoreSettings(this ISlotGroupParent slotGroupParent)
+		=> slotGroupParent.TryGetStorageGroup()?.GetStoreSettings();
+
+	public static StorageGroup? TryGetStorageGroup(this SlotGroup slotGroup) => slotGroup.parent.TryGetStorageGroup();
+
+	public static StorageGroup? TryGetStorageGroup(this ISlotGroupParent slotGroupParent)
+		=> slotGroupParent is IStorageGroupMember groupMember ? groupMember.Group : null;
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static bool Accepts(this StorageGroup storageGroup, Thing t)
+		=> storageGroup.GetStoreSettings().AllowedToAccept(t);
+
 	public static ISlotGroupParent? GetSlotGroupParent(this in IntVec3 position, Map map)
 		=> map.haulDestinationManager.SlotGroupAt(position)?.parent;
+
+	public static StorageSettings? GetThingStoreSettings(this SlotGroup slotGroup)
+		=> slotGroup.parent.GetThingStoreSettings();
+
+	public static StorageSettings? GetThingStoreSettings(this ISlotGroupParent slotGroupParent)
+		=> slotGroupParent is IStorageGroupMember groupMember
+			? groupMember.ThingStoreSettings
+			: slotGroupParent.GetStoreSettings();
 
 	public static ISlotGroupParent? StoringSlotGroupParent(this Thing thing)
 		=> thing.Position.GetSlotGroupParent(thing.GetMap());
