@@ -257,6 +257,10 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			var closestDistSquared = (float)int.MaxValue;
 			var closestSlot = IntVec3.Invalid;
 
+			var hadToFixCache = false;
+
+		StartOfLoop:
+			var listInPriorityOrderCount = listInPriorityOrder.Count;
 			var groupCountByPriority = GetCachedGroupCountByPriority(haulDestinationManager);
 			var i = 0;
 			for (var priorityGroupIndex = groupCountByPriority.Length; priorityGroupIndex-- > 0;)
@@ -274,6 +278,9 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 
 				while (groupsOfPriorityCount-- > 0)
 				{
+					if (i >= listInPriorityOrderCount)
+						goto FixCache;
+					
 					var slotGroup = listInPriorityOrder[i++];
 					int otherGroupMembers;
 					var storageGroup = slotGroup.TryGetStorageGroup();
@@ -303,12 +310,16 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 						if (otherGroupMembers <= 0)
 							break;
 						
+						if (i >= listInPriorityOrderCount)
+							goto FixCache;
+						
 						otherGroupMembers--;
 						slotGroup = listInPriorityOrder[i++];
 					}
 				}
 			}
 
+		Result:
 			if (!closestSlot.IsValid)
 			{
 				foundCell = IntVec3.Invalid;
@@ -317,6 +328,39 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			
 			foundCell = closestSlot;
 			return true;
+			
+		FixCache:
+			if (hadToFixCache)
+			{
+				LogErrorForFailedTryFindBestBetterStoreCellForAttempt(t, carrier, map, currentPriority, faction,
+					closestSlot);
+				goto Result;
+			}
+			else
+			{
+				hadToFixCache = true;
+			}
+			
+			UpdateCache(haulDestinationManager);
+			goto StartOfLoop;
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static void LogErrorForFailedTryFindBestBetterStoreCellForAttempt(Thing t, Pawn carrier, Map? map,
+			StoragePriority currentPriority, Faction faction, IntVec3 closestSlot)
+			=> Log.Error($"Performance Fish's TryFindBestBetterStoreCellFor patch failed to compute accurate "
+				+ $"results after a recache attempt for thing '{t}', pawn '{carrier}', map '{
+					map}', currentPriority '{currentPriority}', faction '{
+						faction}'. The last found cell was '{
+							closestSlot}'. It is most likely incompatible with something in the mod list.\n{
+								Debug.GetStorageGroupInfo(map?.haulDestinationManager?.AllGroupsListInPriorityOrder)}");
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static void UpdateCache(HaulDestinationManager haulDestinationManager)
+		{
+			haulDestinationManager.AllGroupsListInPriorityOrder.InsertionSort(HaulDestinationManager
+				.CompareSlotGroupPrioritiesDescending);
+			haulDestinationManager.Cache().OnPriorityChanged(haulDestinationManager);
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -355,13 +399,24 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			public static void LogStuff(List<SlotGroup> listInPriorityOrder)
 			{
 				LoggedOnce = true;
-				var storageGroups = listInPriorityOrder.Select(static slotGroup => slotGroup.TryGetStorageGroup())
+				Log.Message(GetStorageGroupInfo(listInPriorityOrder));
+			}
+
+			public static string GetStorageGroupInfo(List<SlotGroup>? slotGroupsInPriorityOrder)
+			{
+				if (slotGroupsInPriorityOrder is null)
+					return string.Empty;
+				
+				var storageGroups = slotGroupsInPriorityOrder.Select(static slotGroup => slotGroup.TryGetStorageGroup())
 					.Where(Is.NotNull).Distinct().ToList();
-				Log.Message($"SlotGroup count: {listInPriorityOrder.Count}, StorageGroup count: {
-					storageGroups.Count}, slotGroups in storage groups: {
-						storageGroups.Select(static group => group!.MemberCount).Sum()}, outside of storage groups: {
-							listInPriorityOrder.Select(static slotGroup => slotGroup.TryGetStorageGroup())
-								.Where(Is.Null).Count()}");
+
+				return StringHelper.Resolve($"SlotGroup count: {
+					slotGroupsInPriorityOrder.Count}, StorageGroup count: {
+						storageGroups.Count}, slotGroups in storage groups: {storageGroups
+							.Select(static group => group!.MemberCount)
+							.Sum()}, outside of storage groups: {slotGroupsInPriorityOrder
+							.Select(static slotGroup => slotGroup.TryGetStorageGroup())
+							.Where(Is.Null).Count()}");
 			}
 
 			public static bool LoggedOnce;
