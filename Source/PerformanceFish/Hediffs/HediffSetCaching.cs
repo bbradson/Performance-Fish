@@ -123,10 +123,10 @@ public sealed class HediffSetPrecaching : ClassWithFishPrepatches
 		public static bool Prefix(HediffSet __instance, BodyPartHeight height, BodyPartDepth depth, BodyPartTagDef? tag,
 			BodyPartRecord? partParent, ref IEnumerable<BodyPartRecord> __result, out bool __state)
 		{
-			if (height != BodyPartHeight.Undefined
-				|| depth != BodyPartDepth.Undefined
-				|| tag != null
-				|| partParent != null)
+			if ((height != BodyPartHeight.Undefined)
+				| (depth != BodyPartDepth.Undefined)
+				| (tag != null)
+				| (partParent != null))
 			{
 				__state = false;
 				return true;
@@ -173,7 +173,7 @@ public sealed class HediffSetCaching : ClassWithFishPatches
 		}
 	}
 
-	public record struct NotMissingPartsCacheValue
+	public record struct NotMissingPartsCacheValue()
 	{
 		private int _version = -1;
 		private List<Hediff> _hediffsInSet = [];
@@ -200,13 +200,9 @@ public sealed class HediffSetCaching : ClassWithFishPatches
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			get =>  _version != _hediffsInSet._version || TickHelper.Past(_nextRefreshTick);
 		}
-
-		public NotMissingPartsCacheValue()
-		{
-		}
 	}
 
-	public record struct HediffCacheValue
+	public record struct HediffCacheValue()
 	{
 		private int _version = -1;
 		private List<Hediff> _hediffsInSet = [];
@@ -227,21 +223,13 @@ public sealed class HediffSetCaching : ClassWithFishPatches
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			get => _version != _hediffsInSet._version || TickHelper.Past(_nextRefreshTick);
 		}
-
-		public HediffCacheValue()
-		{
-		}
 	}
 
-	public record struct VisibleHediffCacheValue
+	public record struct VisibleHediffCacheValue()
 	{
 		public HediffCacheValue Value = new();
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public void Update(HediffSet set, Hediff? hediff) => Value.Update(set, hediff);
-
-		public VisibleHediffCacheValue()
-		{
-		}
 	}
 }

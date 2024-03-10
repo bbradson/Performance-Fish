@@ -16,6 +16,8 @@ public static class ActiveMods
 		Multiplayer = Contains(PackageIDs.MULTIPLAYER),
 		PerformanceOptimizer = Contains(PackageIDs.PERFORMANCE_OPTIMIZER),
 		Prepatcher = Contains(PackageIDs.PREPATCHER),
+		PrisonLabor = Contains(PackageIDs.PRISON_LABOR),
+		RIMMSqol = Contains(PackageIDs.RIMMSQOL),
 		UseBestMaterials = Contains(PackageIDs.USE_BEST_MATERIALS),
 		VanillaExpandedFramework = Contains(PackageIDs.VANILLA_EXPANDED_FRAMEWORK);
 	

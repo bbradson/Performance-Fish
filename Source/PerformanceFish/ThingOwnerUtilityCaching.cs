@@ -60,7 +60,7 @@ public sealed class ThingOwnerUtilityPreCaching : ClassWithFishPrepatches
 				return __state = true;
 			}
 
-			outThings.ReplaceContentsWith(cache.Things!);
+			outThings.ReplaceContentsWith(cache.Things);
 			return __state = false;
 		}
 
@@ -73,11 +73,7 @@ public sealed class ThingOwnerUtilityPreCaching : ClassWithFishPrepatches
 			ref var cache = ref Cache.ByInt<Map, ThingRequestGroup, ThingRequestInfo<T>>.Get.GetReference(new(map.uniqueID,
 				(byte)request.group));
 
-			if (cache.Things is null)
-				cache.Things = outThings.Copy();
-			else
-				cache.Things.ReplaceContentsWith(outThings);
-
+			cache.Things.ReplaceContentsWith(outThings);
 			cache.ListsByGroupCount = map.listerThings.listsByGroup[(int)request.group]?.Count ?? -1;
 			cache.ThingHolderCount = ThingHolderCount(map);
 			cache.SetDirty(false, map.uniqueID + (int)request.group + cache.ListsByGroupCount + cache.ThingHolderCount);
@@ -181,12 +177,12 @@ public sealed class ThingOwnerUtilityPreCaching : ClassWithFishPrepatches
 	public bool Dirty => _nextRefreshTick < Current.Game.tickManager.TicksGame;
 }*/
 
-public record struct ThingRequestInfo<T> where T : Thing
+public record struct ThingRequestInfo<T>() where T : Thing
 {
-	private int _nextUpdateTick;
-	public int ListsByGroupCount;
-	public int ThingHolderCount;
-	public List<T>? Things;
+	private int _nextUpdateTick = -2;
+	public int ListsByGroupCount = -2;
+	public int ThingHolderCount = -2;
+	public readonly List<T> Things = [];
 
 	public void SetDirty(bool value, int offset)
 		=> _nextUpdateTick = value ? 0 : TickHelper.Add(3072, offset, 2048);

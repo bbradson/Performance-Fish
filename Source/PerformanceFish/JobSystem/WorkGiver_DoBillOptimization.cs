@@ -14,7 +14,7 @@ using IngredientCacheList
 		bool Found)>;
 using OpCodes = System.Reflection.Emit.OpCodes;
 using RecipeIngredientCache
-	= PerformanceFish.Cache.ByIndex<RimWorld.Bill,
+	= PerformanceFish.Cache.ByInt<RimWorld.Bill,
 		PerformanceFish.JobSystem.WorkGiver_DoBillOptimization.RecipeIngredientCacheValue>;
 
 namespace PerformanceFish.JobSystem;
@@ -96,7 +96,7 @@ public sealed class WorkGiver_DoBillPrepatches : ClassWithFishPrepatches
 				}
 				else
 				{
-					ref var cache = ref RecipeIngredientCache.Get.GetReference(bill);
+					ref var cache = ref RecipeIngredientCache.GetOrAddReference(bill.GetLoadID());
 					if (cache.thingDefs is null || cache.Dirty)
 					{
 						cache.thingDefs = UpdateCache(bill, r, cache.thingDefs);
@@ -501,7 +501,7 @@ public sealed class WorkGiver_DoBillOptimization : ClassWithFishPatches
 			if (thingValidatorInstance is null)
 				return;
 
-			var cache = RecipeIngredientCache.Get[thingValidatorInstance.Bill].thingDefs;
+			var cache = RecipeIngredientCache.GetOrAdd(thingValidatorInstance.Bill.loadID).thingDefs;
 			if (cache is null)
 				return;
 
@@ -583,7 +583,7 @@ public sealed class WorkGiver_DoBillOptimization : ClassWithFishPatches
 				return;
 			}
 
-			var cache = RecipeIngredientCache.Get[bill].thingDefs;
+			var cache = RecipeIngredientCache.GetOrAdd(bill.loadID).thingDefs;
 			if (cache is null)
 				return;
 
@@ -599,10 +599,10 @@ public sealed class WorkGiver_DoBillOptimization : ClassWithFishPatches
 		}
 	}
 
-	public record struct RecipeIngredientCacheValue
+	public record struct RecipeIngredientCacheValue()
 	{
 		public IngredientCacheList? thingDefs;
-		private int _nextRefreshTick;
+		private int _nextRefreshTick = -2;
 
 		public void Update(Bill bill)
 			=> _nextRefreshTick = TickHelper.Add(GenTicks.TickRareInterval * 2, bill.loadID);

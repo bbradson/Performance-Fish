@@ -113,6 +113,16 @@ public static class PrepatcherFields
 	public static extern ref HaulDestinationManagerCache Cache(this HaulDestinationManager manager);
 
 	[PrepatcherField]
+	[ValueInitializer(nameof(CreateBaseStatsCache))]
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static extern float[] BaseStatsCache(this ThingDef thingDef);
+
+	[PrepatcherField]
+	[ValueInitializer(nameof(GetEmptyArray))]
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static extern ref float[] StatsCache(this BuildableDef buildableDef);
+
+	[PrepatcherField]
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static extern ref object MonitorObject(this GasGrid gasGrid);
 
@@ -155,6 +165,14 @@ public static class PrepatcherFields
 	public static Listers.Buildings.Cache CreateListerBuildingsCache() => new();
 	public static Listers.Haulables.Cache CreateListerHaulablesCache() => new();
 	public static HaulDestinationManagerCache CreateHaulDestinationManagerCache() => new();
+	public static float[] GetEmptyArray() => Array.Empty<float>();
+
+	public static float[] CreateBaseStatsCache()
+	{
+		var array = new float[Enum.GetNames(typeof(Defs.ThingDefPatches.Stats)).Length];
+		StatCaching.ResetToDefaults(array);
+		return array;
+	}
 
 	public static object CreateGroupMonitorObject()
 		=> ParallelNoAlloc.RegisterBackgroundWaitingWorkers(Array.Empty<Action>());

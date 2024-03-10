@@ -18,6 +18,8 @@ public static class PackageIDs
 		PERFORMANCE_FISH = "bs.performance",
 		PERFORMANCE_OPTIMIZER = "Taranchuk.PerformanceOptimizer",
 		PREPATCHER = "zetrith.prepatcher",
+		PRISON_LABOR = "avius.prisonlabor",
+		RIMMSQOL = "MalteSchulze.RIMMSqol",
 		USE_BEST_MATERIALS = "kathanon.UseBestMaterials",
 		VANILLA_EXPANDED_FRAMEWORK = "OskarPotocki.VanillaFactionsExpanded.Core";
 }

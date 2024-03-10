@@ -225,7 +225,7 @@ public sealed class Buildings : ClassWithFishPrepatches
 		}
 	}
 
-	public readonly record struct Cache
+	public readonly record struct Cache()
 	{
 		public readonly FishTable<ThingDef, IndexedFishSet<Building>>
 			ColonistBuildingsByDef = new(),
@@ -240,9 +240,5 @@ public sealed class Buildings : ClassWithFishPrepatches
 			ValueInitializer = static type
 				=> (IList)Activator.CreateInstance(typeof(IndexedFishSet<>).MakeGenericType(type))
 		};
-
-		public Cache()
-		{
-		}
 	}
 }

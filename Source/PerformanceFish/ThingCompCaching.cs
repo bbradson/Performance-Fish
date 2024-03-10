@@ -55,7 +55,7 @@ public sealed class ThingCompCaching : ClassWithFishPatches
 			=> IdeoForbidsCache.GetExistingReference(__instance, pawn).Update(__instance, pawn, __result);
 	}
 
-	public record struct IdeoForbidsCacheValue
+	public record struct IdeoForbidsCacheValue()
 	{
 		public bool Result;
 		private int _nextRefreshTick = -2;
@@ -85,9 +85,5 @@ public sealed class ThingCompCaching : ClassWithFishPatches
 
 		private static readonly List<DirectPawnRelation> _nullRelations = [];
 		private static readonly List<Pawn> _nullPawns = [];
-
-		public IdeoForbidsCacheValue()
-		{
-		}
 	}
 }

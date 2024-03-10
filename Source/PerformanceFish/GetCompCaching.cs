@@ -51,9 +51,9 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 			return null;
 		}
 
-		public record struct CacheValue<T> where T : ThingComp
+		public record struct CacheValue<T>() where T : ThingComp
 		{
-			private int _listVersion = -1;
+			private int _listVersion = -2;
 			public T? Comp;
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -68,8 +68,6 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 				_listVersion = thing.comps._version;
 				Comp = comp;
 			}
-			
-			public CacheValue() {}
 		}
 	}
 	
@@ -113,9 +111,9 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 			return null;
 		}
 
-		public record struct CacheValue<T> where T : CompProperties
+		public record struct CacheValue<T>() where T : CompProperties
 		{
-			private int _listVersion = -1;
+			private int _listVersion = -2;
 			public T? Comp;
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -130,8 +128,6 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 				_listVersion = thingDef.comps._version;
 				Comp = comp;
 			}
-			
-			public CacheValue() {}
 		}
 	}
 	
@@ -176,9 +172,9 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 			return false;
 		}
 
-		public record struct CacheValue
+		public record struct CacheValue()
 		{
-			private int _listVersion = -1;
+			private int _listVersion = -2;
 			public bool HasComp;
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -193,8 +189,6 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 				_listVersion = thingDef.comps._version;
 				HasComp = hasComp;
 			}
-			
-			public CacheValue() {}
 		}
 	}
 	
@@ -237,9 +231,9 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 			return null;
 		}
 
-		public record struct CacheValue<T> where T : HediffComp
+		public record struct CacheValue<T>() where T : HediffComp
 		{
-			private int _listVersion = -1;
+			private int _listVersion = -2;
 			public T? Comp;
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -254,8 +248,6 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 				_listVersion = hediff.comps._version;
 				Comp = comp;
 			}
-			
-			public CacheValue() {}
 		}
 	}
 	
@@ -298,9 +290,9 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 			return null;
 		}
 
-		public record struct CacheValue<T> where T : HediffCompProperties
+		public record struct CacheValue<T>() where T : HediffCompProperties
 		{
-			private int _listVersion = -1;
+			private int _listVersion = -2;
 			public T? Comp;
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -315,8 +307,6 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 				_listVersion = hediffDef.comps._version;
 				Comp = comp;
 			}
-			
-			public CacheValue() {}
 		}
 	}
 	
@@ -359,9 +349,9 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 			return null;
 		}
 
-		public record struct CacheValue<T> where T : AbilityComp
+		public record struct CacheValue<T>() where T : AbilityComp
 		{
-			private int _listVersion = -1;
+			private int _listVersion = -2;
 			public T? Comp;
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -376,8 +366,6 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 				_listVersion = ability.comps._version;
 				Comp = comp;
 			}
-			
-			public CacheValue() {}
 		}
 	}
 	
@@ -415,9 +403,9 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 			return null;
 		}
 
-		public record struct CacheValue<T> where T : WorldObjectComp
+		public record struct CacheValue<T>() where T : WorldObjectComp
 		{
-			private int _listVersion = -1;
+			private int _listVersion = -2;
 			public T? Comp;
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -432,8 +420,6 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 				_listVersion = worldObject.comps._version;
 				Comp = comp;
 			}
-			
-			public CacheValue() {}
 		}
 	}
 	
@@ -471,9 +457,9 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 			return null;
 		}
 
-		public record struct CacheValue<T> where T : MapComponent
+		public record struct CacheValue<T>() where T : MapComponent
 		{
-			private int _listVersion = -1;
+			private int _listVersion = -2;
 			public T? Comp;
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -488,8 +474,6 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 				_listVersion = map.components._version;
 				Comp = comp;
 			}
-			
-			public CacheValue() {}
 		}
 	}
 	
@@ -527,7 +511,7 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 
 		public static class Cache<T> where T : WorldComponent
 		{
-			private static int _listVersion = -1;
+			private static int _listVersion = -2;
 			private static World? _world;
 			public static T? Comp;
 
@@ -578,7 +562,7 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 
 		public static class Cache<T> where T : GameComponent
 		{
-			private static int _listVersion = -1;
+			private static int _listVersion = -2;
 			private static Game? _game;
 			public static T? Comp;
 

@@ -7,6 +7,7 @@ using System.Linq;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Mono.Cecil.Rocks;
+using PerformanceFish.Events;
 using PerformanceFish.Prepatching;
 using FieldAttributes = Mono.Cecil.FieldAttributes;
 using MethodImplAttributes = Mono.Cecil.MethodImplAttributes;
@@ -108,5 +109,190 @@ public sealed class ThingDefPatches : ClassWithFishPrepatches
 				// prevent beforefieldinit
 			}
 		}
+	}
+
+	public sealed class BaseMarketValuePatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Caches the frequently accessed and never changing ThingDef.BaseMarketValue property. Also adds proper "
+			+ "exception handling in case of errors in the market value calculation.";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredPropertyGetter(typeof(ThingDef), nameof(ThingDef.BaseMarketValue));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static float ReplacementBody(ThingDef instance)
+		{
+			var cacheValue = instance.BaseStatsCache()[(int)Stats.MarketValue];
+			
+			return !float.IsNaN(cacheValue) ? cacheValue : GetUpdatedValue(instance);
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static float GetUpdatedValue(ThingDef instance)
+			=> Current.Game is null
+				? GetValueSafely(instance)
+				: instance.BaseStatsCache()[(int)Stats.MarketValue] = GetValueSafely(instance);
+
+		public static float GetValueSafely(ThingDef instance)
+			=> ThingDefPatches.GetValueSafely(instance, StatDefOf.MarketValue);
+		
+		public static float LogAndFixMarketValue(BuildableDef def, ThingDef? stuff, Exception exception)
+		{
+			Guard.IsNotNull(def);
+			Log.Error($"Exception thrown while calculating {StatDefOf.MarketValue.label} for def '{
+				def.defName}' from mod '{
+					def.modContentPack?.Name ?? "null"}'. Attempting to fix this now so it doesn't happen again.\n{
+						exception}");
+
+			RecipeDef? recipe;
+			try
+			{
+				recipe = StatWorker_MarketValue.CalculableRecipe(def);
+				// this is slow, but gets cached by perf optimizer. Might be worth replicating
+			}
+			catch (Exception ex)
+			{
+				Log.Error($"Exception thrown while calculating recipe for def '{def.defName}' from mod '{
+					def.modContentPack?.Name ?? "null"}'.\n{ex}");
+				recipe = null;
+			}
+
+			if (recipe?.ingredients is { } ingredients)
+				ingredients.RemoveAll(static ingredientCount => ingredientCount is null);
+			
+			if (def.CostList is { } costList)
+				costList.RemoveAll(static thingDefCountClass => thingDefCountClass?.thingDef is null);
+
+			try
+			{
+				return def.GetStatValueAbstract(StatDefOf.MarketValue, stuff);
+			}
+			catch (Exception ex)
+			{
+				Log.Error($"Exception thrown while calculating market value for def '{def.defName}' from mod '{
+					def.modContentPack?.Name ?? "null"}' again. Fix failed, F.\n{ex}");
+				
+				return 0f;
+			}
+		}
+
+		static BaseMarketValuePatch()
+			=> StaticEvents.StaticConstructorOnStartupCalled
+				+= static () => StatCaching.StatExceptionHandlers[StatDefOf.MarketValue] = LogAndFixMarketValue;
+	}
+
+	public sealed class BaseMassPatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Caches the frequently accessed and never changing ThingDef.BaseMass property. Also adds basic "
+			+ "exception handling in case of errors in the mass calculation.";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredPropertyGetter(typeof(ThingDef), nameof(ThingDef.BaseMass));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+		
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static float ReplacementBody(ThingDef instance)
+		{
+			var cacheValue = instance.BaseStatsCache()[(int)Stats.Mass];
+			
+			return !float.IsNaN(cacheValue) ? cacheValue : GetUpdatedValue(instance);
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static float GetUpdatedValue(ThingDef instance)
+			=> Current.Game is null
+				? GetValueSafely(instance)
+				: instance.BaseStatsCache()[(int)Stats.Mass] = GetValueSafely(instance);
+
+		public static float GetValueSafely(ThingDef instance)
+			=> ThingDefPatches.GetValueSafely(instance, StatDefOf.Mass);
+	}
+
+	public sealed class BaseFlammabilityPatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Caches the frequently accessed and never changing ThingDef.BaseFlammability property. Also adds basic "
+			+ "exception handling in case of errors in the mass calculation.";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredPropertyGetter(typeof(ThingDef), nameof(ThingDef.BaseFlammability));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static float ReplacementBody(ThingDef instance)
+		{
+			var cacheValue = instance.BaseStatsCache()[(int)Stats.Flammability];
+			
+			return !float.IsNaN(cacheValue) ? cacheValue : GetUpdatedValue(instance);
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static float GetUpdatedValue(ThingDef instance)
+			=> Current.Game is null
+				? GetValueSafely(instance)
+				: instance.BaseStatsCache()[(int)Stats.Flammability] = GetValueSafely(instance);
+
+		public static float GetValueSafely(ThingDef instance)
+			=> ThingDefPatches.GetValueSafely(instance, StatDefOf.Flammability);
+	}
+
+	public sealed class BaseMaxHitPointsPatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Caches the frequently accessed and never changing ThingDef.BaseMaxHitPoints property. Also adds basic "
+			+ "exception handling in case of errors in the mass calculation.";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredPropertyGetter(typeof(ThingDef), nameof(ThingDef.BaseMaxHitPoints));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+		
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static int ReplacementBody(ThingDef instance)
+		{
+			var cacheValue = instance.BaseStatsCache()[(int)Stats.MaxHitPoints];
+			
+			return Mathf.RoundToInt(!float.IsNaN(cacheValue) ? cacheValue : GetUpdatedValue(instance));
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static float GetUpdatedValue(ThingDef instance)
+			=> Current.Game is null
+				? GetValueSafely(instance)
+				: instance.BaseStatsCache()[(int)Stats.MaxHitPoints] = GetValueSafely(instance);
+
+		public static float GetValueSafely(ThingDef instance)
+			=> ThingDefPatches.GetValueSafely(instance, StatDefOf.MaxHitPoints);
+	}
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static float GetValueSafely(ThingDef instance, StatDef stat)
+	{
+		try
+		{
+			return instance.GetStatValueAbstract(stat);
+		}
+		catch (Exception ex)
+		{
+			return StatCaching.StatExceptionHandlers.GetOrAdd(stat)(instance, null, ex);
+		}
+	}
+
+	public enum Stats
+	{
+		MarketValue,
+		Mass,
+		Flammability,
+		MaxHitPoints
 	}
 }

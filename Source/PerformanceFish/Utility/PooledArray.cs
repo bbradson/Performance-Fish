@@ -3,21 +3,26 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-using System.Diagnostics.CodeAnalysis;
-
 namespace PerformanceFish.Utility;
 
 public record struct PooledArray<T> : IDisposable, IEnumerable<T>
 {
-	private static T[]?[] _buffers = new T[]?[4];
-	private static int _bufferCount;
-	
 	private T[] _array;
 	private int _length;
 
 	public T[] BackingArray => _array;
 	public int Length => _length;
 	public int Capacity => _array.Length;
+	
+	[ThreadStatic]
+	private static T[]?[]? _buffersThreadStatic;
+
+	[ThreadStatic]
+	private static int _bufferCountThreadStatic;
+
+	private static object _lockObject = new();
+	private static T[]?[] _buffersGlobal = new T[]?[16];
+	private static int _bufferCountGlobal;
 	
 	public T this[int index]
 	{
@@ -41,21 +46,20 @@ public record struct PooledArray<T> : IDisposable, IEnumerable<T>
 
 	public PooledArray(int length)
 	{
-		if (_bufferCount < 1)
-		{
-			NewBuffer(length);
-		}
-		else
-		{
-			ref var bucket = ref _buffers[--_bufferCount];
-			_array = bucket!;
-			bucket = null;
-			if (_array.Length < length)
-				ResizeBuffer(length);
-		}
+		if (_bufferCountThreadStatic == 0)
+			FetchThroughLock();
+
+		ref var bucket = ref _buffersThreadStatic![--_bufferCountThreadStatic];
+		_array = bucket!;
+		bucket = null;
+		if (_array.Length < length)
+			ResizeBuffer(length);
 
 		_length = length;
 	}
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private void ResizeBuffer(int length) => Array.Resize(ref _array, Mathf.NextPowerOfTwo(length));
 
 	public PooledArray(ICollection<T> collection) : this(collection.Count) => collection.CopyTo(_array, 0);
 
@@ -66,34 +70,77 @@ public record struct PooledArray<T> : IDisposable, IEnumerable<T>
 		return ref _array[index];
 	}
 
-	[MethodImpl(MethodImplOptions.NoInlining)]
-	private void ResizeBuffer(int length) => Array.Resize(ref _array, Mathf.NextPowerOfTwo(length));
-
-	[MemberNotNull(nameof(_array))]
-	[MethodImpl(MethodImplOptions.NoInlining)]
-	private void NewBuffer(int length) => _array = new T[Mathf.NextPowerOfTwo(length)];
-
 	public void Dispose()
 	{
-		if (++_bufferCount > _buffers.Length)
-			ExpandBuffers(_bufferCount);
-
 		if (_length > 0)
 			Array.Clear(_array, 0, _length);
 		
-		_buffers[_bufferCount - 1] = _array;
+		var buffersThreadStatic = _buffersThreadStatic ??= InitializeBuffersThreadStatic();
+		
+		if (_bufferCountThreadStatic == 16)
+			PushThroughLock();
+
+		buffersThreadStatic[_bufferCountThreadStatic++] = _array;
 	}
 	
 	public void Sort(IComparer<T> comparer) => _array.AsSpan()[.._length].Sort(comparer);
 
-	private static void ExpandBuffers(int minLength)
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static void FetchThroughLock()
 	{
-		var newBuffers = new T[]?[Mathf.NextPowerOfTwo(minLength)];
+		var buffersThreadStatic = _buffersThreadStatic ??= InitializeBuffersThreadStatic();
+		var createNew = false;
+		
+		lock (_lockObject)
+		{
+			if (_bufferCountGlobal != 0)
+			{
+				for (var i = 8; i-- > 0;)
+				{
+					buffersThreadStatic[i] = _buffersGlobal[--_bufferCountGlobal];
+					_buffersGlobal[_bufferCountGlobal] = default;
+				}
+			}
+			else
+			{
+				createNew = true;
+			}
+		}
 
-		Array.Copy(_buffers, newBuffers, _buffers.Length);
-
-		_buffers = newBuffers;
+		if (createNew)
+			Array.Fill(buffersThreadStatic, Array.Empty<T>(), 0, 8);
+		
+		_bufferCountThreadStatic = 8;
 	}
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static void PushThroughLock()
+	{
+		var buffersThreadStatic = _buffersThreadStatic!;
+		
+		lock (_lockObject)
+		{
+			if (_bufferCountGlobal + 8 > _buffersGlobal.Length)
+				ExpandGlobalBuffers();
+			
+			for (var i = 16; i-- > 8;)
+			{
+				ref var bucket = ref buffersThreadStatic[i];
+				var buffer = bucket;
+				bucket = default;
+
+				_buffersGlobal[_bufferCountGlobal++] = buffer;
+			}
+		}
+		
+		_bufferCountThreadStatic = 8;
+	}
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static void ExpandGlobalBuffers() => Array.Resize(ref _buffersGlobal, _buffersGlobal.Length << 1);
+	
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static T[]?[] InitializeBuffersThreadStatic() => new T[]?[16];
 
 	public IEnumerator<T> GetEnumerator()
 	{

@@ -52,10 +52,10 @@ public sealed class RecipeDefCaching : ClassWithFishPatches
 		private static void UpdateCache(RecipeDef __instance, IEnumerable<ThingDef> __result)
 			=> RecipeUsersCache.GetExistingReference(__instance).Update(__instance, __result);
 
-		public record struct RecipeUsersCacheValue
+		public record struct RecipeUsersCacheValue()
 		{
-			private int _defDatabaseVersion;
-			private int _defRecipeUsersVersion;
+			private int _defDatabaseVersion = -2;
+			private int _defRecipeUsersVersion = -2;
 			private RecipeDef _def;
 			public List<ThingDef> RecipeUsers;
 

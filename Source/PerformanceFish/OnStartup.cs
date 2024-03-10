@@ -4,6 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 using JetBrains.Annotations;
+using PerformanceFish.Events;
 
 namespace PerformanceFish;
 
@@ -20,6 +21,7 @@ public static class OnStartup
 		// 	=> !MothballOptimization.AllowedDefs.Contains(def)).ToStringSafeEnumerable()}");
 		
 		Fields.Initialized = true;
+		StaticEvents.OnStaticConstructorOnStartupCalled();
 	}
 
 	public static class State

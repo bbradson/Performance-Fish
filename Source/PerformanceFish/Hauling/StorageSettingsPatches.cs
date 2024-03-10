@@ -18,18 +18,32 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 		public override string Description { get; }
 			= "Caches results of storage settings checks for things when hauling";
 
+		protected internal override void OnPatchingCompleted()
+			=> Events.ThingEvents.QualityChanging += NotifyQualityChanging;
+
+		public static void NotifyQualityChanging(Thing thing)
+		{
+			if (!thing.IsItem() || thing.TryGetMap() is not { } map)
+				return;
+
+			var haulDestinations = map.haulDestinationManager.AllHaulDestinationsListForReading;
+			for (var i = haulDestinations.Count; i-- > 0;)
+				haulDestinations[i].GetStoreSettings().Cache().AllowedToAccept.Remove(thing.thingIDNumber);
+		}
+
 		public override Expression<Action> TargetMethod { get; }
 			= static () => default(StorageSettings)!.AllowedToAccept(default(Thing));
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool Prefix(StorageSettings __instance, Thing t, ref bool __result, out bool __state)
 		{
-			var cachedAllowedToAcceptValue = __instance.Cache().AllowedToAccept.GetOrAdd(t.thingIDNumber);
+			ref var allowedToAcceptCacheValue
+				= ref __instance.Cache().AllowedToAccept.GetOrAddReference(t.thingIDNumber);
 
-			if (StorageSettingsCache.IsDirty(cachedAllowedToAcceptValue))
+			if (allowedToAcceptCacheValue.Dirty)
 				return __state = true;
 
-			__result = cachedAllowedToAcceptValue.AsBool() /*&& CapacityAllows(__instance, t)*/;
+			__result = allowedToAcceptCacheValue.Value;
 
 			return __state = false;
 		}
@@ -45,7 +59,8 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static void UpdateCache(StorageSettings __instance, Thing t, bool __result)
-			=> __instance.Cache().Update(t.thingIDNumber, __result && t is { def: not null, thingIDNumber: not -1 });
+			=> __instance.Cache().AllowedToAccept.GetOrAddReference(t.thingIDNumber)
+				.Update(t, __result && t is { def: not null, thingIDNumber: not -1 });
 	}
 
 	public sealed class TryNotifyChanged_Patch : FishPatch
@@ -107,9 +122,9 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 		}
 	}
 
-	public record struct StorageSettingsCache
+	public record struct StorageSettingsCache()
 	{
-		public FishTable<int, int> AllowedToAccept = new();
+		public FishTable<int, AllowedToAcceptCacheValue> AllowedToAccept = new();
 
 		private Thing? _parent;
 
@@ -129,15 +144,10 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 
 		public List<Thing> StoredThingsOfDef(ThingDef def) => _storedThingsByDef.GetOrAdd(def.shortHash);
 
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static bool IsDirty(int allowedToAcceptValue) => allowedToAcceptValue == int.MaxValue;
-
-		public void Update(int thingIDNumber, bool allowedToAccept)
-			=> AllowedToAccept[thingIDNumber] = allowedToAccept.AsInt();
-
 		public void Initialize(Thing? slotGroupParent)
 		{
 			_parent = slotGroupParent;
+			_storedThingCount = 0;
 			_storedThingsByDef.Clear();
 			AllowedToAccept.Clear();
 			_lwmProps = slotGroupParent?.TryGetLwmCompProperties();
@@ -177,8 +187,27 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 			
 			SettingsChanged?.Invoke(storageSettings);
 		}
+	}
 
-		public StorageSettingsCache() => AllowedToAccept.ValueInitializer = static _ => int.MaxValue;
+	public record struct AllowedToAcceptCacheValue()
+	{
+		private int
+			_value = int.MaxValue,
+			_nextUpdateTick = -2;
+
+		public bool Value => _value.AsBool();
+
+		public bool Dirty
+		{
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			get => (_value == int.MaxValue) | TickHelper.Past(_nextUpdateTick);
+		}
+
+		public void Update(Thing thing, bool allowedToAccept)
+		{
+			_value = allowedToAccept.AsInt();
+			_nextUpdateTick = TickHelper.Add(512, thing.thingIDNumber, 128);
+		}
 	}
 
 	public static class Debug

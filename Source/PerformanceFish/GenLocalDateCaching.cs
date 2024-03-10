@@ -98,6 +98,6 @@ public sealed class GenLocalDateCaching : ClassWithFishPatches
 	}
 
 	public static Map? SavedMap;
-	public static int SavedTick;
-	public static int DayTick;
+	public static int SavedTick = -2;
+	public static int DayTick = -2;
 }

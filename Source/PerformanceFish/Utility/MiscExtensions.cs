@@ -125,6 +125,9 @@ public static class MiscExtensions
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static bool IsSpawned(this Thing thing) => (uint)thing.mapIndexOrState < (uint)Current.Game.Maps.Count;
 
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static int GetLoadID(this Bill bill) => bill.loadID;
+
 	public static void InvokeWhenCellIndicesReady(this Map map, Action<Map> action)
 	{
 		if (map.cellIndices != null)

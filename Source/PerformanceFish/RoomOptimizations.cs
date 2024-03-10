@@ -6,11 +6,11 @@
 using System.Linq;
 using System.Reflection.Emit;
 using RoomOwnersCache
-	= PerformanceFish.Cache.ByIndex<Verse.Room, PerformanceFish.RoomOptimizations.Owners_Patch.CacheValue>;
+	= PerformanceFish.Cache.ByInt<Verse.Room, PerformanceFish.RoomOptimizations.Owners_Patch.CacheValue>;
 using RoomRoleCache
-	= PerformanceFish.Cache.ByIndex<Verse.Room, PerformanceFish.RoomOptimizations.Role_Patch.CacheValue>;
+	= PerformanceFish.Cache.ByInt<Verse.Room, PerformanceFish.RoomOptimizations.Role_Patch.CacheValue>;
 using ContainedAndAdjacentThingsCache
-	= PerformanceFish.Cache.ByIndex<Verse.Room,
+	= PerformanceFish.Cache.ByInt<Verse.Room,
 		PerformanceFish.RoomOptimizations.ContainedAndAdjacentThings_Patch.CacheValue>;
 using OpCodes = System.Reflection.Emit.OpCodes;
 
@@ -58,7 +58,7 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		public static bool ShouldUpdate(Room __instance)
 		{
 			if (__instance.role is not null
-				|| !RoomRoleCache.Get[__instance.ID].Dirty)
+				|| !RoomRoleCache.GetOrAddReference(__instance.ID).Dirty)
 			{
 				return false;
 			}
@@ -69,11 +69,11 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		}
 
 		private static void UpdateCache(Room __instance)
-			=> RoomRoleCache.Get.GetReference(__instance).SetDirty(__instance);
+			=> RoomRoleCache.GetOrAddReference(__instance.ID).SetDirty(__instance);
 
-		public record struct CacheValue
+		public record struct CacheValue()
 		{
-			private int _nextUpdateTick;
+			private int _nextUpdateTick = -2;
 			public bool Dirty
 			{
 				[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -97,7 +97,7 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool Prefix(Room __instance, ref IEnumerable<Pawn> __result, out bool __state)
 		{
-			ref var cache = ref RoomOwnersCache.Get.GetReference(__instance.ID);
+			ref var cache = ref RoomOwnersCache.GetOrAddReference(__instance.ID);
 
 			if (cache.Dirty)
 			{
@@ -127,36 +127,24 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		private static void UpdateCache(Room __instance, ref IEnumerable<Pawn> __result)
 		{
-			ref var cache = ref RoomOwnersCache.Get.GetReference(__instance);
+			ref var cache = ref RoomOwnersCache.GetOrAddReference(__instance.ID);
 			
 			cache.Update(__instance, __result);
 			
 			__result = cache.Owners;
 		}
 
-		public record struct CacheValue
+		public record struct CacheValue()
 		{
-			private int _nextRefreshTick;
-			public List<Pawn> Owners;
+			private int _nextRefreshTick = -2;
+			public readonly List<Pawn> Owners = [];
 
 			public void Update(Room room, IEnumerable<Pawn>? result)
 			{
-				if (result is null)
-				{
-					(Owners ??= []).Clear();
-				}
-				else
-				{
-					if (Owners != null)
-					{
-						Owners.Clear();
-						Owners.AddRange(result);
-					}
-					else
-					{
-						Owners = [..result];
-					}
-				}
+				Owners.Clear();
+				
+				if (result != null)
+					Owners.AddRange(result);
 				
 				_nextRefreshTick = TickHelper.Add(384, room.ID, 256);
 			}
@@ -243,11 +231,9 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 
 			var regions = instance.Regions;
 
-			ref var cache = ref ContainedAndAdjacentThingsCache.Get.GetReference(instance.ID);
+			ref var cache = ref ContainedAndAdjacentThingsCache.GetOrAddReference(instance.ID);
 
-			if (cache.ListVersions != null
-				&& cache.ListVersions.Count == regions.Count
-				&& !cache.Dirty)
+			if (cache.ListVersions.Count == regions.Count && !cache.Dirty)
 			{
 				var cacheIsAccurate = true;
 				for (var i = 0; i < regions.Count; i++)
@@ -280,7 +266,7 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			var uniqueContainedThings = instance.uniqueContainedThings;
 			var uniqueContainedThingsSet = instance.uniqueContainedThingsSet;
 			uniqueContainedThingsSet.Clear();
-			(cache.ListVersions ??= []).Clear();
+			cache.ListVersions.Clear();
 
 			for (var i = 0; i < regions.Count; i++)
 			{
@@ -360,11 +346,11 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			return uniqueContainedThings;
 		}*/
 
-		public record struct CacheValue
+		public record struct CacheValue()
 		{
-			private int _nextRefreshTick;
-			public List<int>? ListVersions;
-			public List<Thing> Things;
+			private int _nextRefreshTick = -2;
+			public List<int> ListVersions = [];
+			public List<Thing> Things = [];
 			
 			public void SetDirty(bool value, Room room)
 				=> _nextRefreshTick = value ? 0 : TickHelper.Add(3072, room.ID, 2048);

@@ -96,16 +96,12 @@ public sealed class WorldPawnsOptimization : ClassWithFishPrepatches
 				|| allPawnsDead._version != cache.AllPawnsDeadVersion;
 	}
 
-	public record struct Cache
+	public record struct Cache()
 	{
 		public int
-			PawnsAliveVersion = -1,
-			PawnsMothballedVersion = -1,
-			AllPawnsAliveVersion = -1,
-			AllPawnsDeadVersion = -1;
-
-		public Cache()
-		{
-		}
+			PawnsAliveVersion = -2,
+			PawnsMothballedVersion = -2,
+			AllPawnsAliveVersion = -2,
+			AllPawnsDeadVersion = -2;
 	}
 }

@@ -23,6 +23,7 @@ public static class OnAssembliesLoaded
 		
 		TryPatchGraphicsSetter();
 		TryPatchPerformanceOptimizer();
+		TryPatchRIMMSqol();
 		
 		TryInitialize(EqualityComparerOptimization.Optimization.Initialize);
 
@@ -69,6 +70,31 @@ public static class OnAssembliesLoaded
 		{
 			Log.Error($"Failed to apply compatibility patch for {
 				PerformanceOptimizer.ModContentPack?.Name ?? "Performance Optimizer"}");
+		}
+	}
+	
+	// ReSharper disable once InconsistentNaming
+	private static void TryPatchRIMMSqol()
+	{
+		if (!ActiveMods.RIMMSqol)
+			return;
+
+		var success = false;
+		Exception? exception = null;
+
+		try
+		{
+			success = RIMMSqol.TryPatch();
+		}
+		catch (Exception ex)
+		{
+			exception = ex;
+		}
+		
+		if (!success)
+		{
+			Log.Error($"Failed to apply compatibility patch for {
+				RIMMSqol.ModContentPack?.Name ?? "RIMMSqol"}.".AppendNewLineWhenNotNull(exception));
 		}
 	}
 	

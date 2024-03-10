@@ -56,18 +56,9 @@ public sealed class ImmunityHandlerCaching : ClassWithFishPatches
 
 	public sealed class ImmunityRecordExists : FishPatch
 	{
+		public override List<Type> LinkedPatches { get; } = [typeof(TryAddImmunityRecord)];
+
 		public override string? Description { get; } = "Required by the TryAddImmunityRecord optimization.";
-
-		public override bool Enabled
-		{
-			set
-			{
-				if (base.Enabled == value)
-					return;
-
-				Get<TryAddImmunityRecord>().Enabled = base.Enabled = value;
-			}
-		}
 
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.Method(typeof(ImmunityHandler), nameof(ImmunityHandler.ImmunityRecordExists));
@@ -84,19 +75,10 @@ public sealed class ImmunityHandlerCaching : ClassWithFishPatches
 
 	public sealed class TryAddImmunityRecord : FishPatch
 	{
+		public override List<Type> LinkedPatches { get; } = [typeof(ImmunityRecordExists)];
+
 		public override string? Description { get; }
 			= "Optimization for this specific method to not run more checks than necessary.";
-		
-		public override bool Enabled
-		{
-			set
-			{
-				if (base.Enabled == value)
-					return;
-
-				Get<ImmunityRecordExists>().Enabled = base.Enabled = value;
-			}
-		}
 
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.Method(typeof(ImmunityHandler), nameof(ImmunityHandler.TryAddImmunityRecord));
@@ -110,7 +92,7 @@ public sealed class ImmunityHandlerCaching : ClassWithFishPatches
 		}
 	}
 
-	public record struct ImmunityInfoCacheValue
+	public record struct ImmunityInfoCacheValue()
 	{
 		private int _version = -1;
 		private List<Hediff> _hediffsInSet = [];
@@ -132,15 +114,11 @@ public sealed class ImmunityHandlerCaching : ClassWithFishPatches
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			get =>  _version != _hediffsInSet._version || TickHelper.Past(_nextRefreshTick);
 		}
-		
-		public ImmunityInfoCacheValue()
-		{
-		}
 	}
 
-	public record struct ImmunityRecordExistsCacheValue
+	public record struct ImmunityRecordExistsCacheValue()
 	{
 		public bool Value;
-		public int ImmunityListVersion;
+		public int ImmunityListVersion = -2;
 	}
 }

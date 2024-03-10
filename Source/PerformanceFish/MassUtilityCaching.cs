@@ -71,11 +71,11 @@ public sealed class MassUtilityCaching : ClassWithFishPatches
 			=> InventoryMassCache.GetExistingReference(p).Update(__result, p);
 	}
 
-	public record struct GearMassCacheValue
+	public record struct GearMassCacheValue()
 	{
 		public float Mass;
-		private int _nextRefreshTick;
-		private int _equipmentListsState;
+		private int _nextRefreshTick = -2;
+		private int _equipmentListsState = -69123;
 
 		public void Update(float mass, Pawn p)
 		{
@@ -87,9 +87,13 @@ public sealed class MassUtilityCaching : ClassWithFishPatches
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private static int GetEquipmentListsState(Pawn p)
 		{
-			var result = p.apparel != null ? p.apparel.WornApparel._version : 0;
+			var result = p.apparel != null ? p.apparel.WornApparel._version : -1;
 			if (p.equipment != null)
-				result += p.equipment.AllEquipmentListForReading._version;
+			{
+				var equipmentListVersion = (uint)p.equipment.AllEquipmentListForReading._version;
+				result += (int)((equipmentListVersion << 16) | (equipmentListVersion >> 16));
+			}
+
 			return result;
 		}
 
@@ -99,24 +103,23 @@ public sealed class MassUtilityCaching : ClassWithFishPatches
 				|| _equipmentListsState != GetEquipmentListsState(p);
 	}
 
-	public record struct InventoryMassCacheValue
+	public record struct InventoryMassCacheValue()
 	{
 		public float Mass;
-		private int _nextRefreshTick;
-		private int _inventoryListsState;
+		private int _nextRefreshTick = -2;
+		private int _inventoryListsState = -2;
 
 		public void Update(float mass, Pawn p)
 		{
 			Mass = mass;
+			//shorter refresh interval because of stack sizes not being considered by the listVersion check
 			_nextRefreshTick = TickHelper.Add(GenTicks.TickRareInterval, p.thingIDNumber);
-			_inventoryListsState
-				= GetInventoryListsState(
-					p); //shorter refresh interval because of stack sizes not being considered by the listVersion check
+			_inventoryListsState = GetInventoryListsState(p); 
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private static int GetInventoryListsState(Pawn p)
-			=> p.inventory?.innerContainer is { } container ? container.innerList._version : 0;
+			=> p.inventory?.innerContainer is { } container ? container.innerList._version : -42;
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public bool IsDirty(Pawn p)

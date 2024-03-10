@@ -5,7 +5,7 @@
 
 namespace PerformanceFish.Hauling;
 
-public record struct HaulDestinationManagerCache
+public record struct HaulDestinationManagerCache()
 {
 	public static readonly int StoragePriorityCount = Enum.GetValues(typeof(StoragePriority)).Length;
 
@@ -23,9 +23,5 @@ public record struct HaulDestinationManagerCache
 			GroupCountByPriority[(int)slotGroupsByPriority[i].Settings.Priority]++;
 
 		PriorityChanged?.Invoke(manager);
-	}
-
-	public HaulDestinationManagerCache()
-	{
 	}
 }

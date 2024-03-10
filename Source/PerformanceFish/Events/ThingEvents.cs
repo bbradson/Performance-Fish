@@ -11,7 +11,8 @@ public sealed class ThingEvents : ClassWithFishPrepatches
 {
 	public static event Action<Thing>?
 		Initialized,
-		Destroyed;
+		Destroyed,
+		QualityChanging;
 	
 	public sealed class Instanced
 	{
@@ -161,6 +162,21 @@ public sealed class ThingEvents : ClassWithFishPrepatches
 			= AccessTools.DeclaredMethod(typeof(ThingWithComps), nameof(ThingWithComps.InitializeComps));
 
 		public static void Postfix(ThingWithComps __instance) => OnThingInitialized(__instance);
+	}
+
+	public sealed class SetQualityPatch : FishPrepatch
+	{
+		public override bool ShowSettings => false;
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(CompQuality), nameof(CompQuality.SetQuality));
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static void Prefix(CompQuality __instance, QualityCategory q)
+		{
+			if (q != __instance.qualityInt)
+				QualityChanging?.Invoke(__instance.parent);
+		}
 	}
 
 	private static void OnThingInitialized(Thing thing) => Initialized?.Invoke(thing);

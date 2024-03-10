@@ -31,8 +31,11 @@ public sealed class HaulDestinationManagerPatches : ClassWithFishPrepatches
 
 		public static void Postfix(HaulDestinationManager __instance, IHaulDestination haulDestination)
 		{
-			if (haulDestination is ISlotGroupParent)
-				__instance.Cache().OnPriorityChanged(__instance);
+			if (haulDestination is not ISlotGroupParent slotGroupParent)
+				return;
+
+			__instance.Cache().OnPriorityChanged(__instance);
+			slotGroupParent.GetSlotGroup().NotifyCellCountChanged();
 		}
 	}
 	
@@ -46,8 +49,11 @@ public sealed class HaulDestinationManagerPatches : ClassWithFishPrepatches
 
 		public static void Postfix(HaulDestinationManager __instance, IHaulDestination haulDestination)
 		{
-			if (haulDestination is ISlotGroupParent)
-				__instance.Cache().OnPriorityChanged(__instance);
+			if (haulDestination is not ISlotGroupParent slotGroupParent)
+				return;
+
+			__instance.Cache().OnPriorityChanged(__instance);
+			slotGroupParent.GetSlotGroup().ResetDistricts();
 		}
 	}
 	

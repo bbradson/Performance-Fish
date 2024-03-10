@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 using SharedAltarCache
-	= PerformanceFish.Cache.ByIndex<RimWorld.Ideo,
+	= PerformanceFish.Cache.ByInt<RimWorld.Ideo,
 		PerformanceFish.ThoughtWorker_Precept_AltarSharingOptimization.SharedAltarCacheValue>;
 
 namespace PerformanceFish;
@@ -13,6 +13,8 @@ public sealed class ThoughtWorker_Precept_AltarSharingOptimization : ClassWithFi
 {
 	public sealed class SharedAltar_Patch : FirstPriorityFishPatch
 	{
+		public override bool Enabled => base.Enabled && ModsConfig.IdeologyActive;
+
 		public override string Description { get; }
 			= "Caches results of ideology's shared altar thoughtworker and throttles it to wait a minimum of 128 ticks "
 			+ "between refreshes. Quite impactful on performance";
@@ -20,17 +22,17 @@ public sealed class ThoughtWorker_Precept_AltarSharingOptimization : ClassWithFi
 		public override MethodBase TargetMethodInfo { get; } = AccessTools.Method(
 			typeof(ThoughtWorker_Precept_AltarSharing), nameof(ThoughtWorker_Precept_AltarSharing.SharedAltar));
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool Prefix(ThoughtWorker_Precept_AltarSharing __instance, Pawn pawn, ref Thing? __result,
 			out bool __state)
 		{
-			if (!pawn.IsSpawned())
+			if (!pawn.IsSpawned() || pawn.Ideo is not { } ideo)
 			{
 				__result = null;
 				return __state = false;
 			}
 
-			ref var cache = ref SharedAltarCache.Get.GetReference(pawn.Ideo);
-
+			ref var cache = ref SharedAltarCache.GetOrAddReference(ideo.id);
 			if (cache.Dirty)
 				return __state = true;
 
@@ -38,22 +40,31 @@ public sealed class ThoughtWorker_Precept_AltarSharingOptimization : ClassWithFi
 			return __state = false;
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static void Postfix(Pawn pawn, Thing __result, bool __state)
 		{
 			if (!__state)
 				return;
 
-			SharedAltarCache.Get[pawn.Ideo] = new(pawn, __result);
+			UpdateCache(pawn, __result);
 		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static void UpdateCache(Pawn pawn, Thing __result)
+			=> SharedAltarCache.GetExistingReference(pawn.Ideo.id) = new(pawn, __result);
 	}
 
 	public record struct SharedAltarCacheValue
 	{
 		public Thing? thing;
-		private int _nextLateRefreshTick;
-		private int _nextEarlyRefreshTick;
-		private int _allStructuresListVersion;
-		private ListerThings _lister;
+		private int _nextLateRefreshTick = -2;
+		private int _nextEarlyRefreshTick = -2;
+		private int _allStructuresListVersion = -2;
+		private ListerThings _lister = null!;
+
+		public SharedAltarCacheValue()
+		{
+		}
 
 		public SharedAltarCacheValue(Pawn pawn, Thing? result)
 		{

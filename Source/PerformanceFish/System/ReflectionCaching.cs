@@ -415,11 +415,9 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 			public PropertyInfo? Info;
 		}
 
-		public record struct TypeFullNameCacheValue
+		public record struct TypeFullNameCacheValue()
 		{
-			private object? _value;
-
-			public TypeFullNameCacheValue() => _value = typeof(void);
+			private object? _value = typeof(void);
 
 			public string? Name
 			{

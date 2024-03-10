@@ -113,11 +113,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			var thingEvents = thing.Events();
 			
 			if (thing is ISlotGroupParent)
-			{
-				thingEvents.Spawned += NotifySlotGroupCellCountChanged;
 				thingEvents.Spawned += StorageSettingsPatches.InitializeSlotGroupParent;
-				thingEvents.DeSpawned += NotifySlotGroupCellCountChanged;
-			}
 
 			if (!thing.IsItem())
 				return;
@@ -125,12 +121,6 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			thingEvents.RegisteredAtThingGrid += TryNotifyReceivedThing;
 			thingEvents.DeregisteredAtThingGrid += TryNotifyLostThing;
 		}
-
-		public static void NotifySlotGroupCellCountChanged(Thing slotGroupParent, Map map)
-			=> NotifySlotGroupCellCountChanged(slotGroupParent);
-		
-		public static void NotifySlotGroupCellCountChanged(Thing slotGroupParent)
-			=> slotGroupParent.GetSlotGroup()?.NotifyCellCountChanged();
 
 		public static void TryNotifyReceivedThing(Thing thing, Map map, in IntVec3 cell)
 		{
@@ -370,12 +360,26 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static void TryRemoveFromListerHaulables(Thing t, StoragePriority currentPriority)
 		{
+			if (ModCompatibility.ActiveMods.Multiplayer | !HaulablesTickPatchActive)
+				return;
+
 			if (t.IsInAnyStorage() /*t.IsInValidStorage()*/ && t.TryGetMapHeld() is { } map)
-				map.listerHaulables.TryRemoveDirectly(t);
-			
+				map.listerHaulables.Cache().ThingsQueuedToRemove.Add(t);
+
 			// remove for any storage instead of only valid storage to prevent further haul attempts until the next
 			// automatic ListerHaulablesTick cycle
 		}
+
+		private static int _haulablesTickPatchActive = int.MaxValue;
+
+		private static bool HaulablesTickPatchActive
+			=> _haulablesTickPatchActive != int.MaxValue
+				? _haulablesTickPatchActive.AsBool()
+				: UpdateHaulablesTickPatchActive();
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static bool UpdateHaulablesTickPatchActive()
+			=> (_haulablesTickPatchActive = Get<Haulables.TickPatch>().IsActive.AsInt()).AsBool();
 
 		public static class Debug
 		{

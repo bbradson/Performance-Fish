@@ -17,7 +17,7 @@
 		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 		<Configurations>v1.4</Configurations>
-		<Version>0.3.999.92</Version>
+		<Version>0.5.0.0</Version>
 		<NoWarn>
 			1701;1702;IL2121;CS8500;CS9082;CA1000;CA1002;CA1003;CA1707;CA1010;CA1715;CA1716;CA1724;CA1031;CA1033;
 			CA1034;CA1043;CA1051;CA1305;CA1310;CA1710;CA1711;CA1810;CA1812;CA1819;CA1851;CA2002;CA5394;CA1725;CA1062
@@ -50,7 +50,7 @@
 		</When -->
 	</Choose>
 	<ItemGroup>
-		<PackageReference Include="Lib.Harmony" Version="2.*" ExcludeAssets="runtime" />
+		<PackageReference Include="Lib.Harmony" Version="2.2.*" ExcludeAssets="runtime" />
 		<PackageReference Include="Zetrith.Prepatcher" Version="1.*" ExcludeAssets="runtime" />
 		<PackageReference Include="Krafs.Publicizer" Version="2.*" />
 		<PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.*" ExcludeAssets="runtime" /><!-- Version included in Unity is missing IsNullRef -->

@@ -49,6 +49,7 @@ public sealed class UtilityPatches : ClassWithFishPatches
 		public static void Postfix()
 		{
 			Cache.Utility.Clear();
+			StatCaching.ResetAllStatsCaches();
 			ParallelNoAlloc.ClearAll();
 			foreach (var patch in PerformanceFishMod.AllPatchClasses!)
 			{

@@ -48,7 +48,7 @@ public sealed class PerformanceFishMod : Mod
 		PACKAGE_ID = PackageIDs.PERFORMANCE_FISH;
 	
 	[Obsolete("I am not incrementing this version number")]
-	public const decimal VERSION = 0.4M;
+	public const decimal VERSION = 0.5M;
 
 	public static Version LoadedVersion => typeof(PerformanceFishMod).Assembly.GetLoadedVersion();
 

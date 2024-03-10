@@ -12,4 +12,8 @@ public static class StaticEvents
 		add => Cache.Utility.Cleared += value;
 		remove => Cache.Utility.Cleared -= value;
 	}
+
+	public static event Action? StaticConstructorOnStartupCalled;
+
+	internal static void OnStaticConstructorOnStartupCalled() => StaticConstructorOnStartupCalled?.Invoke();
 }

@@ -22,7 +22,7 @@ public sealed class IdeoUtilityCaching : ClassWithFishPrepatches
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool Prefix(Thing? t, Ideo? ideo, ref float __result, out bool __state)
 		{
-			if (t is null || ideo is null || t.thingIDNumber < 0)
+			if (t is null || t.thingIDNumber < 0 || ideo is null)
 			{
 				__state = false;
 				return true;
@@ -51,10 +51,10 @@ public sealed class IdeoUtilityCaching : ClassWithFishPrepatches
 			=> StyleDominanceCache.GetExistingReference(t, ideo).Update(__result, t);
 	}
 
-	public record struct StyleDominanceCacheValue
+	public record struct StyleDominanceCacheValue()
 	{
 		public float Value;
-		private int _nextRefreshTick;
+		private int _nextRefreshTick = -2;
 
 		public void Update(float value, Thing thing)
 		{

@@ -46,9 +46,9 @@ public sealed class MeditationUtilityCaching : ClassWithFishPatches
 				.Update(__result, pawn);
 	}
 
-	public record struct PsyfocusCacheValue
+	public record struct PsyfocusCacheValue()
 	{
-		private int _nextRefreshTick;
+		private int _nextRefreshTick = -2;
 		public float PsyfocusGain;
 
 		public void Update(float psyfocusGain, Pawn pawn)

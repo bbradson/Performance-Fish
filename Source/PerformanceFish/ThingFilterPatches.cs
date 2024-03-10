@@ -205,7 +205,7 @@ public sealed class ThingFilterPatches : ClassWithFishPatches
 	public static void ForceSynchronizeCache(ThingFilter filter)
 		=> AllowedDefsListCache.GetOrAddReference(filter).Update(ref filter);
 
-	public record struct AllowedDefsListCacheValue : ICacheable<ThingFilter>, ICacheable<ThingFilter, int>
+	public record struct AllowedDefsListCacheValue() : ICacheable<ThingFilter>, ICacheable<ThingFilter, int>
 	{
 		public List<ThingDef> Defs = [];
 		private int _nextRefreshTick = -2;
@@ -229,7 +229,7 @@ public sealed class ThingFilterPatches : ClassWithFishPatches
 
 			Defs.ReplaceContentsWith(allowedDefs);
 
-			SortDefs(Defs); // why, actually? I don't remember
+			SortDefs(Defs); // TODO: figure out what this was meant for
 			
 			SetDirty(false, tickOffset + Defs.Count + (key.disallowedSpecialFilters?.Count ?? 0));
 		}
@@ -240,11 +240,11 @@ public sealed class ThingFilterPatches : ClassWithFishPatches
 			var defArray = defs._items;
 			var marketValues = GetTempArrayForSorting(defCount);
 			for (var i = 0; i < defCount; i++)
-				marketValues[i] = GetMarketValueSafely(defArray[i]);
+				marketValues[i] = defArray[i].BaseMarketValue;
 
-			//Array.Sort(marketValues, defs); would require an array of perfect length, generating garbage
+			// Array.Sort(marketValues, defs); has no count argument
 
-			defArray.AsSpan()[..defCount].Sort(marketValues.AsSpan()[..defCount], null);
+			defArray.AsSpan()[..defCount].Sort(marketValues.AsSpan()[..defCount]);
 			defs._version++;
 		}
 
@@ -254,60 +254,5 @@ public sealed class ThingFilterPatches : ClassWithFishPatches
 				: _tempArrayForSorting = new float[defCount];
 
 		private static float[] _tempArrayForSorting = Array.Empty<float>();
-
-		private static float GetMarketValueSafely(ThingDef def)
-		{
-			try
-			{
-				return def.BaseMarketValue;
-			}
-			catch (Exception ex)
-			{
-				return LogAndFixMarketValue(def, ex);
-			}
-		}
-
-		private static float LogAndFixMarketValue(ThingDef def, Exception exception)
-		{
-			Guard.IsNotNull(def);
-			Log.Warning($"Exception thrown while calculating market value for def {def.defName} from mod {
-				def.modContentPack?.Name ?? "null"}. Attempting to fix this now so it doesn't happen again.\n{
-					exception}");
-
-			RecipeDef? recipe;
-			try
-			{
-				recipe = StatWorker_MarketValue.CalculableRecipe(def);
-				// this is slow, but gets cached by perf optimizer. Might be worth replicating
-			}
-			catch (Exception ex)
-			{
-				Log.Error($"Exception thrown while calculating recipe for def {def.defName} from mod {
-					def.modContentPack?.Name ?? "null"}.\n{ex}");
-				recipe = null;
-			}
-
-			if (recipe?.ingredients is { } ingredients)
-				ingredients.RemoveAll(static ingredientCount => ingredientCount is null);
-			
-			if (def.CostList is { } costList)
-				costList.RemoveAll(static thingDefCountClass => thingDefCountClass?.thingDef is null);
-
-			try
-			{
-				return def.BaseMarketValue;
-			}
-			catch (Exception ex)
-			{
-				Log.Error($"Exception thrown while calculating market value for def {def.defName} from mod {
-						def.modContentPack?.Name ?? "null"} again. Fix failed, F.\n{ex}");
-				
-				return 0f;
-			}
-		}
-
-		public AllowedDefsListCacheValue()
-		{
-		}
 	}
 }
