@@ -24,4 +24,12 @@ public static class StringExtensions
 
 	public static string AppendWhenNotNull(this string instance, object? value)
 		=> value != null ? instance + value : instance;
+	
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static bool Contains(this string self, string value, StringComparison comparison)
+	{
+		Guard.IsNotNull(self);
+		Guard.IsNotNull(value);
+		return self.IndexOf(value, comparison) >= 0;
+	}
 }

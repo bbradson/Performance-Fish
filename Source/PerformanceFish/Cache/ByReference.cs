@@ -8,6 +8,7 @@ using System.Security;
 using System.Threading.Tasks;
 using JetBrains.Annotations;
 // ReSharper disable ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
+// ReSharper disable WithExpressionModifiesAllMembers
 
 namespace PerformanceFish.Cache;
 
@@ -18,9 +19,9 @@ public static class ByReferenceUnclearable<T, TResult>
 {
 	public const int MINIMUM_CALL_COUNT_FOR_STARTING_TASK = 8;
 	
-	public static object SyncLock = new();
+	public static readonly object SyncLock = new();
 
-	private static FishTable<T, TResult> _get = Utility.AddNewUnclearable<T, TResult>();
+	private static readonly FishTable<T, TResult> _get = Utility.AddNewUnclearable<T, TResult>();
 
 	[ThreadStatic]
 	private static FishTable<T, TResult>? _getThreadStatic;
@@ -138,7 +139,8 @@ public static class ByReferenceUnclearable<T, TResult>
 	}
 
 	[SecuritySafeCritical]
-	public static Task<TCacheResult>? RequestFromCacheAsync<TCacheValue, TArgument2, TCacheResult>(T key, TArgument2 second)
+	public static Task<TCacheResult>? RequestFromCacheAsync<TCacheValue, TArgument2, TCacheResult>(T key,
+		TArgument2 second)
 		where TCacheValue : TResult, IAsyncCacheable<T, TArgument2, TCacheResult>
 	{
 		TCacheValue cacheCopy;
@@ -200,8 +202,8 @@ public static class ByReferenceUnclearable<T, TResult>
 		return !cache.Result.Equals<TCacheResult>(default);
 	}
 
-	private static async Task<TCacheResult> UpdateCacheAsync<TCacheValue, TArgument2, TCacheResult>(T key, TCacheValue cacheCopy,
-		TArgument2 second)
+	private static async Task<TCacheResult> UpdateCacheAsync<TCacheValue, TArgument2, TCacheResult>(T key,
+		TCacheValue cacheCopy, TArgument2 second)
 		where TCacheValue : TResult, IAsyncCacheable<T, TArgument2, TCacheResult>
 	{
 		TCacheResult? result = default;
@@ -240,11 +242,13 @@ public static class ByReferenceUnclearable<T, TResult>
 public static class ByReference<T, TResult>
 	where T : notnull where TResult : new()
 {
-	private static object _valueInitializerLock = new();
+	private static readonly object _valueInitializerLock = new();
 	
-	public static object SyncLock = new();
+	public static readonly object SyncLock = new();
+
+	private static readonly List<IDictionary> _allCaches = [];
 	
-	private static FishTable<T, TResult> _get = InitializeNew();
+	private static readonly FishTable<T, TResult> _get = InitializeNew();
 
 	[ThreadStatic]
 	private static FishTable<T, TResult>? _getThreadStatic;
@@ -293,15 +297,8 @@ public static class ByReference<T, TResult>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static ref TResult GetOrAddReference(ref T key) => ref Get.GetOrAddReference(ref key);
 
-	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static ref TResult GetExistingReference(T key) => ref Get.GetReference(key);
 
-	public static void Remove(T key)
-	{
-		Get.Remove(key);
-		GetDirectly.Remove(key);
-	}
-	
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static void Update<VResult>(T key) where VResult : TResult, ICacheable<T>
 		=> Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key);
@@ -393,7 +390,8 @@ public static class ByReference<T, TResult>
 		return result ?? ThrowHelper.ThrowInvalidOperationException<TCacheResult>();
 	}
 
-	public static Task<TCacheResult> RequestFromCacheAsync<TCacheValue, TArgument2, TCacheResult>(T key, TArgument2 second)
+	public static Task<TCacheResult> RequestFromCacheAsync<TCacheValue, TArgument2, TCacheResult>(T key,
+		TArgument2 second)
 		where TCacheValue : TResult, IAsyncCacheable<T, TArgument2, TCacheResult>
 	{
 		TCacheValue cacheCopy;
@@ -424,8 +422,8 @@ public static class ByReference<T, TResult>
 		return !cache.Result.Equals<TCacheResult>(default);
 	}
 
-	private static async ValueTask<TCacheResult> UpdateCacheAsync<TCacheValue, TArgument2, TCacheResult>(T key, TCacheValue cacheCopy,
-		TArgument2 second)
+	private static async ValueTask<TCacheResult> UpdateCacheAsync<TCacheValue, TArgument2, TCacheResult>(T key,
+		TCacheValue cacheCopy, TArgument2 second)
 		where TCacheValue : TResult, IAsyncCacheable<T, TArgument2, TCacheResult>
 	{
 		TCacheResult? result = default;
@@ -444,23 +442,14 @@ public static class ByReference<T, TResult>
 		return result ?? ThrowHelper.ThrowInvalidOperationException<TCacheResult>();
 	}
 
-	public static unsafe void Initialize()
-	{
-		try
-		{
-			_ = FisheryLib.FunctionPointers.Equals<T>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<T>.Default;
-		}
-		catch (Exception ex)
-		{
-			Log.Error(
-				$"Performance Fish encountered an exception while trying to initialize {
-					typeof(ByReference<T, TResult>).FullName}\n{ex}");
-		}
-	}
+	public static void Initialize() => Utility.Internal.Initialize<T>();
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
-	private static FishTable<T, TResult> InitializeNew() => Utility.AddNew(ValueInitializer);
+	private static FishTable<T, TResult> InitializeNew() => Utility.AddNew(_allCaches, ValueInitializer);
+
+	public static void Remove(T key) => Utility.Internal.RemoveIn(_allCaches, key);
+
+	public static void Clear() => Utility.Internal.ClearIn(_allCaches);
 }
 
 [PublicAPI]
@@ -468,16 +457,43 @@ public static class ByReference<T, TResult>
 public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 	where T1 : notnull where T2 : notnull where TResult : new()
 {
-	private static FishTable<ByReference<T1, T2, TResult>, TResult> _get
-		= Utility.AddNew<ByReference<T1, T2, TResult>, TResult>();
+	public T1 First;
+	public T2 Second;
+	
+	private static readonly object _valueInitializerLock = new();
+
+	private static readonly List<IDictionary> _allCaches = [];
+
+	private static readonly FishTable<ByReference<T1, T2, TResult>, TResult> _get
+		= InitializeNew();
 
 	[ThreadStatic]
 	private static FishTable<ByReference<T1, T2, TResult>, TResult>? _getThreadStatic;
 
+	private static Func<ByReference<T1, T2, TResult>, TResult>? _valueInitializer;
+	
+	public static Func<ByReference<T1, T2, TResult>, TResult>? ValueInitializer
+	{
+		get
+		{
+			lock (_valueInitializerLock)
+				return _valueInitializer;
+		}
+		set
+		{
+			lock (_valueInitializerLock)
+			{
+				value ??= static _ => Reflection.New<TResult>();
+				_valueInitializer = value;
+				_get.ValueInitializer = value;
+			}
+		}
+	}
+
 	public static FishTable<ByReference<T1, T2, TResult>, TResult> Get
 	{
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		get => _getThreadStatic ??= Utility.AddNew<ByReference<T1, T2, TResult>, TResult>();
+		get => _getThreadStatic ??= InitializeNew();
 	}
 
 	public static FishTable<ByReference<T1, T2, TResult>, TResult> GetDirectly
@@ -488,7 +504,7 @@ public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static ref TResult GetOrAddReference(T1 first, T2 second)
-		=> ref Get.GetOrAddReference(new() { First = first, Second = second });
+		=> ref Get.GetOrAddReference(default(ByReference<T1, T2, TResult>) with { First = first, Second = second });
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static ref TResult GetOrAddReference(in ByReference<T1, T2, TResult> key)
@@ -497,7 +513,7 @@ public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static unsafe ref TResult GetExistingReference(T1 first, T2 second)
 	{
-		var key = new ByReference<T1, T2, TResult>(first, second);
+		var key = default(ByReference<T1, T2, TResult>) with { First = first, Second = second };
 		return ref Get.GetReference(ref key);
 	}
 	
@@ -509,7 +525,7 @@ public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 	public static void Update<VResult>(T1 first, T2 second)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, TResult>>
 	{
-		var key = new ByReference<T1, T2, TResult>(first, second);
+		var key = default(ByReference<T1, T2, TResult>) with { First = first, Second = second };
 		Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key);
 	}
 
@@ -517,7 +533,7 @@ public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 	public static void Update<VResult, V2>(T1 key1, T2 key2, V2 second)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, TResult>, V2>
 	{
-		var key = new ByReference<T1, T2, TResult>(key1, key2);
+		var key = default(ByReference<T1, T2, TResult>) with { First = key1, Second = key2 };
 		Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key, second);
 	}
 
@@ -525,7 +541,7 @@ public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 	public static void Update<VResult, V2, V3>(T1 key1, T2 key2, V2 second, V3 third)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, TResult>, V2, V3>
 	{
-		var key = new ByReference<T1, T2, TResult>(key1, key2);
+		var key = default(ByReference<T1, T2, TResult>) with { First = key1, Second = key2 };
 		Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key, second, third);
 	}
 	
@@ -533,7 +549,7 @@ public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 	public static unsafe ref VResult GetAndCheck<VResult>(T1 first, T2 second)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, TResult>>
 	{
-		var key = new ByReference<T1, T2, TResult>(first, second);
+		var key = default(ByReference<T1, T2, TResult>) with { First = first, Second = second };
 		ref var cache = ref Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key));
 		if (cache.Dirty)
 			cache.Update(ref key);
@@ -545,7 +561,7 @@ public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 	public static unsafe ref VResult GetAndCheck<VResult, V2>(T1 key1, T2 key2, V2 second)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, TResult>, V2>
 	{
-		var key = new ByReference<T1, T2, TResult>(key1, key2);
+		var key = default(ByReference<T1, T2, TResult>) with { First = key1, Second = key2 };
 		ref var cache = ref Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key));
 		if (cache.Dirty)
 			cache.Update(ref key, second);
@@ -557,7 +573,7 @@ public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 	public static unsafe ref VResult GetAndCheck<VResult, V2, V3>(T1 key1, T2 key2, V2 second, V3 third)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, TResult>, V2, V3>
 	{
-		var key = new ByReference<T1, T2, TResult>(key1, key2);
+		var key = default(ByReference<T1, T2, TResult>) with { First = key1, Second = key2 };
 		ref var cache = ref Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key));
 		if (cache.Dirty)
 			cache.Update(ref key, second, third);
@@ -579,28 +595,12 @@ public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 		Second = second;
 	}
 
-	public static unsafe void Initialize()
+	public static void Initialize()
 	{
-		try
-		{
-			_ = FisheryLib.FunctionPointers.Equals<T1>.Default;
-			_ = FisheryLib.FunctionPointers.Equals<T2>.Default;
-			_ = FisheryLib.FunctionPointers.Equals<ByReference<T1, T2, TResult>>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<T1>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<T2>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<ByReference<T1, T2, TResult>>.Default;
-		}
-		catch (Exception ex)
-		{
-			Log.Error(
-				$"Performance Fish encountered an exception while trying to initialize {
-					typeof(ByReference<T1, T2, TResult>).FullName}\n{ex}");
-		}
+		Utility.Internal.Initialize<T1>();
+		Utility.Internal.Initialize<T2>();
+		Utility.Internal.Initialize<ByReference<T1, T2, TResult>>();
 	}
-
-	public T1 First;
-
-	public T2 Second;
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public bool Equals(ByReference<T1, T2, TResult> other)
@@ -609,6 +609,14 @@ public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override int GetHashCode() => HashCode.Combine(First, Second);
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static FishTable<ByReference<T1, T2, TResult>, TResult> InitializeNew()
+		=> Utility.AddNew(_allCaches, ValueInitializer);
+
+	public static void Remove(ByReference<T1, T2, TResult> key) => Utility.Internal.RemoveIn(_allCaches, key);
+
+	public static void Clear() => Utility.Internal.ClearIn(_allCaches);
 
 	T1 IMemberCount<T1>.First
 	{
@@ -628,22 +636,49 @@ public record struct ByReference<T1, T2, TResult> : IInitializable<T1, T2>
 public record struct ByReference<T1, T2, T3, TResult>
 	where T1 : notnull where T2 : notnull where T3 : notnull where TResult : new()
 {
-	// TODO: Switch to FishTable. This is used by some of the reflection patches and currently crashes when not used
-	// with standard dictionaries
+	public T1 First;
+	public T2 Second;
+	public T3 Third;
+	public int HashCode;
 	
-	private static Dictionary<ByReference<T1, T2, T3, TResult>, TResult> _get
-		= Utility.AddNew<Dictionary<ByReference<T1, T2, T3, TResult>, TResult>>();
+	// TODO: Fix ReflectionCaching:CustomAttributeCache causing crashes when not used with standard dictionaries
+	
+	private static readonly object _valueInitializerLock = new();
+
+	private static readonly List<IDictionary> _allCaches = [];
+	
+	private static readonly FishTable<ByReference<T1, T2, T3, TResult>, TResult> _get = InitializeNew();
 
 	[ThreadStatic]
-	private static Dictionary<ByReference<T1, T2, T3, TResult>, TResult>? _getThreadStatic;
+	private static FishTable<ByReference<T1, T2, T3, TResult>, TResult>? _getThreadStatic;
 
-	public static Dictionary<ByReference<T1, T2, T3, TResult>, TResult> Get
+	private static Func<ByReference<T1, T2, T3, TResult>, TResult>? _valueInitializer;
+	
+	public static Func<ByReference<T1, T2, T3, TResult>, TResult>? ValueInitializer
 	{
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		get => _getThreadStatic ??= Utility.AddNew<Dictionary<ByReference<T1, T2, T3, TResult>, TResult>>();
+		get
+		{
+			lock (_valueInitializerLock)
+				return _valueInitializer;
+		}
+		set
+		{
+			lock (_valueInitializerLock)
+			{
+				value ??= static _ => Reflection.New<TResult>();
+				_valueInitializer = value;
+				_get.ValueInitializer = value;
+			}
+		}
 	}
 
-	public static Dictionary<ByReference<T1, T2, T3, TResult>, TResult> GetDirectly
+	public static FishTable<ByReference<T1, T2, T3, TResult>, TResult> Get
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _getThreadStatic ??= InitializeNew();
+	}
+
+	public static FishTable<ByReference<T1, T2, T3, TResult>, TResult> GetDirectly
 	{
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		get => _get;
@@ -652,7 +687,7 @@ public record struct ByReference<T1, T2, T3, TResult>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static unsafe ref TResult GetOrAddReference(T1 first, T2 second, T3 third)
 	{
-		var key = new ByReference<T1, T2, T3, TResult> { First = first, Second = second, Third = third };
+		var key = Create(first, second, third);
 		return ref Get.GetOrAddReference(ref key);
 	}
 	
@@ -663,7 +698,7 @@ public record struct ByReference<T1, T2, T3, TResult>
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static unsafe ref TResult GetExistingReference(T1 first, T2 second, T3 third)
 	{
-		var key = new ByReference<T1, T2, T3, TResult>(first, second, third);
+		var key = Create(first, second, third);
 		return ref Get.GetReference(ref key);
 	}
 	
@@ -675,7 +710,7 @@ public record struct ByReference<T1, T2, T3, TResult>
 	public static void Update<VResult>(T1 first, T2 second, T3 third)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, T3, TResult>>
 	{
-		var key = new ByReference<T1, T2, T3, TResult>(first, second, third);
+		var key = Create(first, second, third);
 		Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key);
 	}
 
@@ -683,7 +718,7 @@ public record struct ByReference<T1, T2, T3, TResult>
 	public static void Update<VResult, V2>(T1 key1, T2 key2, T3 key3, V2 second)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, T3, TResult>, V2>
 	{
-		var key = new ByReference<T1, T2, T3, TResult>(key1, key2, key3);
+		var key = Create(key1, key2, key3);
 		Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key, second);
 	}
 
@@ -691,7 +726,7 @@ public record struct ByReference<T1, T2, T3, TResult>
 	public static void Update<VResult, V2, V3>(T1 key1, T2 key2, T3 key3, V2 second, V3 third)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, T3, TResult>, V2, V3>
 	{
-		var key = new ByReference<T1, T2, T3, TResult>(key1, key2, key3);
+		var key = Create(key1, key2, key3);
 		Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key, second, third);
 	}
 	
@@ -699,7 +734,7 @@ public record struct ByReference<T1, T2, T3, TResult>
 	public static unsafe ref VResult GetAndCheck<VResult>(T1 first, T2 second, T3 third)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, T3, TResult>>
 	{
-		var key = new ByReference<T1, T2, T3, TResult>(first, second, third);
+		var key = Create(first, second, third);
 		ref var cache = ref Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key));
 		if (cache.Dirty)
 			cache.Update(ref key);
@@ -711,7 +746,7 @@ public record struct ByReference<T1, T2, T3, TResult>
 	public static unsafe ref VResult GetAndCheck<VResult, V2>(T1 key1, T2 key2, T3 key3, V2 second)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, T3, TResult>, V2>
 	{
-		var key = new ByReference<T1, T2, T3, TResult>(key1, key2, key3);
+		var key = Create(key1, key2, key3);
 		ref var cache = ref Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key));
 		if (cache.Dirty)
 			cache.Update(ref key, second);
@@ -723,7 +758,7 @@ public record struct ByReference<T1, T2, T3, TResult>
 	public static unsafe ref VResult GetAndCheck<VResult, V2, V3>(T1 key1, T2 key2, T3 key3, V2 second, V3 third)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, T3, TResult>, V2, V3>
 	{
-		var key = new ByReference<T1, T2, T3, TResult>(key1, key2, key3);
+		var key = Create(key1, key2, key3);
 		ref var cache = ref Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key));
 		if (cache.Dirty)
 			cache.Update(ref key, second, third);
@@ -732,41 +767,32 @@ public record struct ByReference<T1, T2, T3, TResult>
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	// ReSharper disable once ConvertToPrimaryConstructor
 	public ByReference(T1 first, T2 second, T3 third)
 	{
 		First = first;
 		Second = second;
 		Third = third;
-		_hashCode = HashCode.Combine(first, second, third);
+		HashCode = FisheryLib.HashCode.Combine(first, second, third);
 	}
 
-	public static unsafe void Initialize()
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static ByReference<T1, T2, T3, TResult> Create(T1 first, T2 second, T3 third)
+		=> default(ByReference<T1, T2, T3, TResult>) with
+		{
+			First = first,
+			Second = second,
+			Third = third,
+			HashCode = FisheryLib.HashCode.Combine(first, second, third)
+		};
+
+	public static void Initialize()
 	{
-		try
-		{
-			_ = FisheryLib.FunctionPointers.Equals<T1>.Default;
-			_ = FisheryLib.FunctionPointers.Equals<T2>.Default;
-			_ = FisheryLib.FunctionPointers.Equals<T3>.Default;
-			_ = FisheryLib.FunctionPointers.Equals<ByReference<T1, T2, T3, TResult>>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<T1>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<T2>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<T3>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<ByReference<T1, T2, T3, TResult>>.Default;
-		}
-		catch (Exception ex)
-		{
-			Log.Error($"Performance Fish encountered an exception while trying to initialize {
-				typeof(ByReference<T1, T2, T3, TResult>).FullName}\n{ex}");
-		}
+		Utility.Internal.Initialize<T1>();
+		Utility.Internal.Initialize<T2>();
+		Utility.Internal.Initialize<T3>();
+		Utility.Internal.Initialize<ByReference<T1, T2, T3, TResult>>();
 	}
-
-	public T1 First;
-
-	public T2 Second;
-
-	public T3 Third;
-
-	private int _hashCode;
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public bool Equals(ByReference<T1, T2, T3, TResult> other)
@@ -775,7 +801,15 @@ public record struct ByReference<T1, T2, T3, TResult>
 			&& Third.Equals<T3>(other.Third);
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode() => _hashCode;
+	public override int GetHashCode() => HashCode;
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static FishTable<ByReference<T1, T2, T3, TResult>, TResult> InitializeNew()
+		=> Utility.AddNew(_allCaches, ValueInitializer);
+
+	public static void Remove(ByReference<T1, T2, T3, TResult> key) => Utility.Internal.RemoveIn(_allCaches, key);
+
+	public static void Clear() => Utility.Internal.ClearIn(_allCaches);
 }
 
 [PublicAPI]
@@ -783,16 +817,45 @@ public record struct ByReference<T1, T2, T3, TResult>
 public record struct ByReference<T1, T2, T3, T4, TResult>
 	where T1 : notnull where T2 : notnull where T3 : notnull where T4 : notnull where TResult : new()
 {
-	private static FishTable<ByReference<T1, T2, T3, T4, TResult>, TResult> _get
-		= Utility.AddNew<ByReference<T1, T2, T3, T4, TResult>, TResult>();
+	public T1 First;
+	public T2 Second;
+	public T3 Third;
+	public T4 Fourth;
+	public int HashCode;
+	
+	private static readonly object _valueInitializerLock = new();
+
+	private static readonly List<IDictionary> _allCaches = [];
+	
+	private static readonly FishTable<ByReference<T1, T2, T3, T4, TResult>, TResult> _get = InitializeNew();
 
 	[ThreadStatic]
 	private static FishTable<ByReference<T1, T2, T3, T4, TResult>, TResult>? _getThreadStatic;
 
+	private static Func<ByReference<T1, T2, T3, T4, TResult>, TResult>? _valueInitializer;
+	
+	public static Func<ByReference<T1, T2, T3, T4, TResult>, TResult>? ValueInitializer
+	{
+		get
+		{
+			lock (_valueInitializerLock)
+				return _valueInitializer;
+		}
+		set
+		{
+			lock (_valueInitializerLock)
+			{
+				value ??= static _ => Reflection.New<TResult>();
+				_valueInitializer = value;
+				_get.ValueInitializer = value;
+			}
+		}
+	}
+
 	public static FishTable<ByReference<T1, T2, T3, T4, TResult>, TResult> Get
 	{
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		get => _getThreadStatic ??= Utility.AddNew<ByReference<T1, T2, T3, T4, TResult>, TResult>();
+		get => _getThreadStatic ??= InitializeNew();
 	}
 
 	public static FishTable<ByReference<T1, T2, T3, T4, TResult>, TResult> GetDirectly
@@ -804,7 +867,7 @@ public record struct ByReference<T1, T2, T3, T4, TResult>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static unsafe ref TResult GetOrAddReference(T1 first, T2 second, T3 third, T4 fourth)
 	{
-		var key = new ByReference<T1, T2, T3, T4, TResult> { First = first, Second = second, Third = third, Fourth = fourth};
+		var key = Create(first, second, third, fourth);
 		return ref Get.GetOrAddReference(ref key);
 	}
 	
@@ -815,7 +878,7 @@ public record struct ByReference<T1, T2, T3, T4, TResult>
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static unsafe ref TResult GetExistingReference(T1 first, T2 second, T3 third, T4 fourth)
 	{
-		var key = new ByReference<T1, T2, T3, T4, TResult>(first, second, third, fourth);
+		var key = Create(first, second, third, fourth);
 		return ref Get.GetReference(ref key);
 	}
 	
@@ -827,7 +890,7 @@ public record struct ByReference<T1, T2, T3, T4, TResult>
 	public static void Update<VResult>(T1 first, T2 second, T3 third, T4 fourth)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, T3, T4, TResult>>
 	{
-		var key = new ByReference<T1, T2, T3, T4, TResult>(first, second, third, fourth);
+		var key = Create(first, second, third, fourth);
 		Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key);
 	}
 
@@ -835,7 +898,7 @@ public record struct ByReference<T1, T2, T3, T4, TResult>
 	public static void Update<VResult, V2>(T1 key1, T2 key2, T3 key3, T4 key4, V2 second)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, T3, T4, TResult>, V2>
 	{
-		var key = new ByReference<T1, T2, T3, T4, TResult>(key1, key2, key3, key4);
+		var key = Create(key1, key2, key3, key4);
 		Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key, second);
 	}
 
@@ -843,7 +906,7 @@ public record struct ByReference<T1, T2, T3, T4, TResult>
 	public static void Update<VResult, V2, V3>(T1 key1, T2 key2, T3 key3, T4 key4, V2 second, V3 third)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, T3, T4, TResult>, V2, V3>
 	{
-		var key = new ByReference<T1, T2, T3, T4, TResult>(key1, key2, key3, key4);
+		var key = Create(key1, key2, key3, key4);
 		Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key, second, third);
 	}
 	
@@ -851,7 +914,7 @@ public record struct ByReference<T1, T2, T3, T4, TResult>
 	public static unsafe ref VResult GetAndCheck<VResult>(T1 first, T2 second, T3 third, T4 fourth)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, T3, T4, TResult>>
 	{
-		var key = new ByReference<T1, T2, T3, T4, TResult>(first, second, third, fourth);
+		var key = Create(first, second, third, fourth);
 		ref var cache = ref Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key));
 		if (cache.Dirty)
 			cache.Update(ref key);
@@ -863,7 +926,7 @@ public record struct ByReference<T1, T2, T3, T4, TResult>
 	public static unsafe ref VResult GetAndCheck<VResult, V2>(T1 key1, T2 key2, T3 key3, T4 key4, V2 second)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, T3, T4, TResult>, V2>
 	{
-		var key = new ByReference<T1, T2, T3, T4, TResult>(key1, key2, key3, key4);
+		var key = Create(key1, key2, key3, key4);
 		ref var cache = ref Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key));
 		if (cache.Dirty)
 			cache.Update(ref key, second);
@@ -876,7 +939,7 @@ public record struct ByReference<T1, T2, T3, T4, TResult>
 		V3 third)
 		where VResult : TResult, ICacheable<ByReference<T1, T2, T3, T4, TResult>, V2, V3>
 	{
-		var key = new ByReference<T1, T2, T3, T4, TResult>(key1, key2, key3, key4);
+		var key = Create(key1, key2, key3, key4);
 		ref var cache = ref Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key));
 		if (cache.Dirty)
 			cache.Update(ref key, second, third);
@@ -885,47 +948,35 @@ public record struct ByReference<T1, T2, T3, T4, TResult>
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	// ReSharper disable once ConvertToPrimaryConstructor
 	public ByReference(T1 first, T2 second, T3 third, T4 fourth)
 	{
 		First = first;
 		Second = second;
 		Third = third;
 		Fourth = fourth;
-		_hashCode = HashCode.Combine(first, second, third, fourth);
+		HashCode = FisheryLib.HashCode.Combine(first, second, third, fourth);
 	}
 
-	public static unsafe void Initialize()
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static ByReference<T1, T2, T3, T4, TResult> Create(T1 first, T2 second, T3 third, T4 fourth)
+		=> default(ByReference<T1, T2, T3, T4, TResult>) with
+		{
+			First = first,
+			Second = second,
+			Third = third,
+			Fourth = fourth,
+			HashCode = FisheryLib.HashCode.Combine(first, second, third, fourth)
+		};
+
+	public static void Initialize()
 	{
-		try
-		{
-			_ = FisheryLib.FunctionPointers.Equals<T1>.Default;
-			_ = FisheryLib.FunctionPointers.Equals<T2>.Default;
-			_ = FisheryLib.FunctionPointers.Equals<T3>.Default;
-			_ = FisheryLib.FunctionPointers.Equals<T4>.Default;
-			_ = FisheryLib.FunctionPointers.Equals<ByReference<T1, T2, T3, T4, TResult>>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<T1>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<T2>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<T3>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<T4>.Default;
-			_ = FisheryLib.FunctionPointers.GetHashCode<ByReference<T1, T2, T3, T4, TResult>>.Default;
-		}
-		catch (Exception ex)
-		{
-			Log.Error(
-				$"Performance Fish encountered an exception while trying to initialize {
-					typeof(ByReference<T1, T2, T3, T4, TResult>).FullName}\n{ex}");
-		}
+		Utility.Internal.Initialize<T1>();
+		Utility.Internal.Initialize<T2>();
+		Utility.Internal.Initialize<T3>();
+		Utility.Internal.Initialize<T4>();
+		Utility.Internal.Initialize<ByReference<T1, T2, T3, T4, TResult>>();
 	}
-
-	public T1 First;
-
-	public T2 Second;
-
-	public T3 Third;
-
-	public T4 Fourth;
-
-	private int _hashCode;
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public bool Equals(ByReference<T1, T2, T3, T4, TResult> other)
@@ -935,6 +986,182 @@ public record struct ByReference<T1, T2, T3, T4, TResult>
 			&& Fourth.Equals<T4>(other.Fourth);
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public override int GetHashCode() => _hashCode;
+	public override int GetHashCode() => HashCode;
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static FishTable<ByReference<T1, T2, T3, T4, TResult>, TResult> InitializeNew()
+		=> Utility.AddNew(_allCaches, ValueInitializer);
+
+	public static void Remove(ByReference<T1, T2, T3, T4, TResult> key) => Utility.Internal.RemoveIn(_allCaches, key);
+
+	public static void Clear() => Utility.Internal.ClearIn(_allCaches);
+}
+
+[PublicAPI]
+[StructLayout(LayoutKind.Sequential, Pack = 1)]
+public record struct ByReferenceClassic<T1, T2, T3, TResult>
+	where T1 : notnull where T2 : notnull where T3 : notnull where TResult : new()
+{
+	public T1 First;
+	public T2 Second;
+	public T3 Third;
+	public int HashCode;
+	
+	// TODO: Figure out why this behaves differently compared to FishTables on ReflectionCaching:CustomAttributeCache
+	
+	private static readonly object _valueInitializerLock = new();
+
+	private static readonly List<IDictionary> _allCaches = [];
+	
+	private static readonly Dictionary<ByReferenceClassic<T1, T2, T3, TResult>, TResult> _get = InitializeNew();
+
+	[ThreadStatic]
+	private static Dictionary<ByReferenceClassic<T1, T2, T3, TResult>, TResult>? _getThreadStatic;
+
+	public static Dictionary<ByReferenceClassic<T1, T2, T3, TResult>, TResult> Get
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _getThreadStatic ??= InitializeNew();
+	}
+
+	public static Dictionary<ByReferenceClassic<T1, T2, T3, TResult>, TResult> GetDirectly
+	{
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		get => _get;
+	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static unsafe ref TResult GetOrAddReference(T1 first, T2 second, T3 third)
+	{
+		var key = Create(first, second, third);
+		return ref Get.GetOrAddReference(ref key);
+	}
+	
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static ref TResult GetOrAddReference(in ByReferenceClassic<T1, T2, T3, TResult> key)
+		=> ref Get.GetOrAddReference(ref Unsafe.AsRef(in key));
+	
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static unsafe ref TResult GetExistingReference(T1 first, T2 second, T3 third)
+	{
+		var key = Create(first, second, third);
+		return ref Get.GetReference(ref key);
+	}
+	
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static ref TResult GetExistingReference(in ByReferenceClassic<T1, T2, T3, TResult> key)
+		=> ref Get.GetReference(ref Unsafe.AsRef(in key));
+	
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static void Update<VResult>(T1 first, T2 second, T3 third)
+		where VResult : TResult, ICacheable<ByReferenceClassic<T1, T2, T3, TResult>>
+	{
+		var key = Create(first, second, third);
+		Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key);
+	}
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static void Update<VResult, V2>(T1 key1, T2 key2, T3 key3, V2 second)
+		where VResult : TResult, ICacheable<ByReferenceClassic<T1, T2, T3, TResult>, V2>
+	{
+		var key = Create(key1, key2, key3);
+		Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key, second);
+	}
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	public static void Update<VResult, V2, V3>(T1 key1, T2 key2, T3 key3, V2 second, V3 third)
+		where VResult : TResult, ICacheable<ByReferenceClassic<T1, T2, T3, TResult>, V2, V3>
+	{
+		var key = Create(key1, key2, key3);
+		Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key)).Update(ref key, second, third);
+	}
+	
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static unsafe ref VResult GetAndCheck<VResult>(T1 first, T2 second, T3 third)
+		where VResult : TResult, ICacheable<ByReferenceClassic<T1, T2, T3, TResult>>
+	{
+		var key = Create(first, second, third);
+		ref var cache = ref Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key));
+		if (cache.Dirty)
+			cache.Update(ref key);
+
+		return ref cache!;
+	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static unsafe ref VResult GetAndCheck<VResult, V2>(T1 key1, T2 key2, T3 key3, V2 second)
+		where VResult : TResult, ICacheable<ByReferenceClassic<T1, T2, T3, TResult>, V2>
+	{
+		var key = Create(key1, key2, key3);
+		ref var cache = ref Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key));
+		if (cache.Dirty)
+			cache.Update(ref key, second);
+
+		return ref cache!;
+	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static unsafe ref VResult GetAndCheck<VResult, V2, V3>(T1 key1, T2 key2, T3 key3, V2 second, V3 third)
+		where VResult : TResult, ICacheable<ByReferenceClassic<T1, T2, T3, TResult>, V2, V3>
+	{
+		var key = Create(key1, key2, key3);
+		ref var cache = ref Unsafe.As<TResult, VResult>(ref Get.GetOrAddReference(ref key));
+		if (cache.Dirty)
+			cache.Update(ref key, second, third);
+
+		return ref cache!;
+	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	// ReSharper disable once ConvertToPrimaryConstructor
+	public ByReferenceClassic(T1 first, T2 second, T3 third)
+	{
+		First = first;
+		Second = second;
+		Third = third;
+		HashCode = FisheryLib.HashCode.Combine(first, second, third);
+	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static ByReferenceClassic<T1, T2, T3, TResult> Create(T1 first, T2 second, T3 third)
+		=> default(ByReferenceClassic<T1, T2, T3, TResult>) with
+		{
+			First = first,
+			Second = second,
+			Third = third,
+			HashCode = FisheryLib.HashCode.Combine(first, second, third)
+		};
+
+	public static void Initialize()
+	{
+		Utility.Internal.Initialize<T1>();
+		Utility.Internal.Initialize<T2>();
+		Utility.Internal.Initialize<T3>();
+		Utility.Internal.Initialize<ByReferenceClassic<T1, T2, T3, TResult>>();
+	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public bool Equals(ByReferenceClassic<T1, T2, T3, TResult> other)
+		=> First.Equals<T1>(other.First)
+			&& Second.Equals<T2>(other.Second)
+			&& Third.Equals<T3>(other.Third);
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public override int GetHashCode() => HashCode;
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static Dictionary<ByReferenceClassic<T1, T2, T3, TResult>, TResult> InitializeNew()
+	{
+		var newCache = Utility.AddNew<Dictionary<ByReferenceClassic<T1, T2, T3, TResult>, TResult>>();
+	
+		lock (_allCaches)
+			_allCaches.Add(newCache);
+	
+		return newCache;
+	}
+
+	public static void Remove(ByReferenceClassic<T1, T2, T3, TResult> key) => Utility.Internal.RemoveIn(_allCaches, key);
+
+	public static void Clear() => Utility.Internal.ClearIn(_allCaches);
 }
 #pragma warning restore CS9091

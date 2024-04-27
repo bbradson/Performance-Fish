@@ -3,8 +3,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection.Emit;
+using Mono.Cecil;
+using Mono.Cecil.Cil;
+using PerformanceFish.Prepatching;
 using RoomOwnersCache
 	= PerformanceFish.Cache.ByInt<Verse.Room, PerformanceFish.RoomOptimizations.Owners_Patch.CacheValue>;
 using RoomRoleCache
@@ -27,7 +31,7 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			+ "instead of every time anything at all changes or moves";
 
 		public override MethodBase TargetMethodInfo { get; }
-			= AccessTools.PropertyGetter(typeof(Room), nameof(Room.Role));
+			= AccessTools.DeclaredPropertyGetter(typeof(Room), nameof(Room.Role));
 
 		public static CodeInstructions Transpiler(CodeInstructions instructions)
 		{
@@ -55,13 +59,11 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			}
 		}
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool ShouldUpdate(Room __instance)
 		{
-			if (__instance.role is not null
-				|| !RoomRoleCache.GetOrAddReference(__instance.ID).Dirty)
-			{
+			if (__instance.role is not null || !RoomRoleCache.GetOrAddReference(__instance.ID).Dirty)
 				return false;
-			}
 
 			UpdateCache(__instance);
 			return true;
@@ -92,7 +94,7 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			+ "quite expensive";
 
 		public override MethodBase TargetMethodInfo { get; }
-			= AccessTools.PropertyGetter(typeof(Room), nameof(Room.Owners));
+			= AccessTools.DeclaredPropertyGetter(typeof(Room), nameof(Room.Owners));
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool Prefix(Room __instance, ref IEnumerable<Pawn> __result, out bool __state)
@@ -111,7 +113,8 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			return __state = false;
 		}
 
-		private static bool CanCache(Room __instance)
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static bool CanCache(Room __instance)
 			=> __instance is { TouchesMapEdge: false, IsHuge: false }
 				&& (!__instance.statsAndRoleDirty || __instance.ContainedBeds.Any());
 
@@ -157,29 +160,6 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		}
 	}
 
-	public sealed class Regions_Patch : FirstPriorityFishPatch
-	{
-		public override string Description { get; } = "Minor optimization";
-		public override MethodBase TargetMethodInfo { get; }
-			= AccessTools.PropertyGetter(typeof(Room), nameof(Room.Regions));
-
-		public static CodeInstructions Transpiler(CodeInstructions codeInstructions)
-			=> Reflection.MakeReplacementCall(Regions_Replacement);
-
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static List<Region> Regions_Replacement(Room instance)
-		{
-			var tmpRegions = instance.tmpRegions;
-			var districts = instance.districts;
-
-			tmpRegions.Clear();
-			for (var i = 0; i < districts.Count; i++)
-				tmpRegions.AddRangeFast(districts[i].Regions);
-
-			return tmpRegions;
-		}
-	}
-
 	public sealed class ContainedBeds_Patch : FirstPriorityFishPatch
 	{
 		public override string Description { get; }
@@ -188,7 +168,7 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			+ "against spikes";
 
 		public override MethodBase TargetMethodInfo { get; }
-			= AccessTools.PropertyGetter(typeof(Room), nameof(Room.ContainedBeds));
+			= AccessTools.DeclaredPropertyGetter(typeof(Room), nameof(Room.ContainedBeds));
 
 		public static CodeInstructions Transpiler(CodeInstructions codeInstructions, ILGenerator generator)
 			=> Reflection.GetCodeInstructions(ContainedBeds_Replacement, generator);
@@ -219,7 +199,7 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		public override string Description { get; } = "Caching of room content info. Variable impact";
 
 		public override MethodBase TargetMethodInfo { get; }
-			= AccessTools.PropertyGetter(typeof(Room), nameof(Room.ContainedAndAdjacentThings));
+			= AccessTools.DeclaredPropertyGetter(typeof(Room), nameof(Room.ContainedAndAdjacentThings));
 
 		public static CodeInstructions Transpiler(CodeInstructions codeInstructions)
 			=> Reflection.MakeReplacementCall(ContainedAndAdjacentThings_Replacement);
@@ -236,18 +216,11 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			if (cache.ListVersions.Count == regions.Count && !cache.Dirty)
 			{
 				var cacheIsAccurate = true;
-				for (var i = 0; i < regions.Count; i++)
+				
+				for (var i = regions.Count; i-- > 0;)
 				{
-					var allThings = regions[i].listerThings.AllThings;
-					if (allThings == null)
-					{
-						if (cache.ListVersions[i] != -1)
-							cacheIsAccurate = false;
-					}
-					else if (cache.ListVersions[i] != allThings._version)
-					{
+					if (cache.ListVersions[i] != (regions[i]?.listerThings.AllThings?._version ?? -1))
 						cacheIsAccurate = false;
-					}
 				}
 
 				if (cacheIsAccurate)
@@ -260,6 +233,7 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 			return RefreshContainedAndAdjacentThings(instance, regions, ref cache);
 		}
 
+		[MethodImpl(MethodImplOptions.NoInlining)]
 		private static List<Thing> RefreshContainedAndAdjacentThings(Room instance, List<Region> regions,
 			ref CacheValue cache)
 		{
@@ -270,8 +244,7 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 
 			for (var i = 0; i < regions.Count; i++)
 			{
-				var allThings = regions[i].ListerThings.AllThings;
-				if (allThings == null)
+				if (regions[i]?.ListerThings.AllThings is not { } allThings)
 				{
 					cache.ListVersions.Add(-1);
 					continue;
@@ -281,67 +254,66 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 				for (var j = 0; j < count; j++)
 					uniqueContainedThingsSet.Add(allThings[j]);
 
-				cache.ListVersions.Add(allThings.Version());
+				cache.ListVersions.Add(allThings._version);
 			}
 
 			uniqueContainedThings.AddRange(uniqueContainedThingsSet);
-			if (cache.Things is { } list)
-				list.ReplaceContentsWith(uniqueContainedThings);
-			else
-				cache.Things = [..uniqueContainedThings];
 			
+			cache.Things.ReplaceContentsWith(uniqueContainedThings);
 			cache.SetDirty(false, instance);
 
 			uniqueContainedThingsSet.Clear();
 			return uniqueContainedThings;
 		}
 
-		/*private static List<Thing> RefreshContainedAndAdjacentThingsAlternative(Room instance, List<Region> regions,
-			FishThingsInfo cache)
+		/*[MethodImpl(MethodImplOptions.NoInlining)]
+		private static List<Thing> RefreshContainedAndAdjacentThingsAlternative(Room instance, List<Region> regions,
+			ref CacheValue cache)
 		{
 			var uniqueContainedThings = instance.uniqueContainedThings;
-			(cache.listVersions ??= new()).Clear();
+			cache.ListVersions.Clear();
 			var map = instance.Map;
 			var regionGrid = map.regionGrid.regionGrid;
 			var mapSizeX = map.cellIndices.mapSizeX;
 
-			var adjacentThings = new List<Thing>();
+			using var pooledAdjacentThings = new Pools.PooledIList<List<Thing>>();
+			var adjacentThings = pooledAdjacentThings.List;
+			var regionCount = regions.Count;
+			using var pooledRegionIDs = new PooledArray<int>(regionCount);
+			var regionIDs = pooledRegionIDs.BackingArray;
+			
+			for (var i = regionCount; i-- > 0;)
+				regionIDs[i] = regions[i].id;
 
-			for (var i = 0; i < regions.Count; i++)
+			for (var i = 0; i < regionCount; i++)
 			{
 				var region = regions[i];
-				var allThings = region.ListerThings.AllThings;
-				if (allThings == null)
+				if (region.ListerThings.AllThings is not { } allThings)
 				{
-					cache.listVersions.Add(-1);
+					cache.ListVersions.Add(-1);
 					continue;
 				}
 
 				var count = allThings.Count;
 				for (var j = 0; j < count; j++)
 				{
-					if (regionGrid[allThings[j].Position.CellToIndex(mapSizeX)] == region)
-						uniqueContainedThings.Add(allThings[j]);
-					else
-						adjacentThings.Add(allThings[j]);
+					var thing = allThings[j];
+					var thingRegionId = regionGrid[thing.Position.CellToIndex(mapSizeX)].id;
+					
+					if (thingRegionId == region.id)
+						uniqueContainedThings.Add(thing);
+					else if (!regionIDs.Contains(thingRegionId) && !adjacentThings.Contains(thing))
+						adjacentThings.Add(thing);
 				}
 
-				cache.listVersions.Add(allThings._version);
+				cache.ListVersions.Add(allThings._version);
 			}
 
-			for (var i = 0; i < adjacentThings.Count; i++)
-			{
-				if (!uniqueContainedThings.Contains(adjacentThings[i]))
-					uniqueContainedThings.Add(adjacentThings[i]);
-			}
+			for (var i = adjacentThings.Count; i-- > 0;)
+				uniqueContainedThings.Add(adjacentThings[i]);
 
-			if (cache.things is List<Thing> list)
-				list.ReplaceContentsWith(uniqueContainedThings);
-			else
-				cache.things = new List<Thing>(uniqueContainedThings);
-			cache.ShouldRefreshNow = false;
-
-			CachedThingLists[instance] = cache;
+			cache.Things.ReplaceContentsWith(uniqueContainedThings);
+			cache.SetDirty(false, instance);
 
 			return uniqueContainedThings;
 		}*/
@@ -349,8 +321,8 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 		public record struct CacheValue()
 		{
 			private int _nextRefreshTick = -2;
-			public List<int> ListVersions = [];
-			public List<Thing> Things = [];
+			public readonly List<int> ListVersions = [];
+			public readonly List<Thing> Things = [];
 			
 			public void SetDirty(bool value, Room room)
 				=> _nextRefreshTick = value ? 0 : TickHelper.Add(3072, room.ID, 2048);
@@ -382,20 +354,50 @@ public sealed class RoomOptimizations : ClassWithFishPatches, IHasDescription
 				return null;
 
 			var regionAndRoomUpdater = map.regionAndRoomUpdater;
+			
 			if (regionAndRoomUpdater.Enabled)
-			{
 				regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
-			}
 			else if (regionAndRoomUpdater.AnythingToRebuild)
-			{
-				Verse.Log.Warning($"Trying to get valid region at {
-					c.ToString()} but RegionAndRoomUpdater is disabled. The result may be incorrect.");
-			}
+				LogIncorrectResultWarning(c);
 
 			var region = map.regionGrid.regionGrid[(c.z * cellIndices.mapSizeX) + c.x];
 			return region is null || !region.valid || (region.type & allowedRegionTypes) == 0
 				? null
 				: region.District?.Room;
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static void LogIncorrectResultWarning(IntVec3 c)
+			=> Log.Warning($"Trying to get valid region at {
+				c.ToString()} but RegionAndRoomUpdater is disabled. The result may be incorrect.\nThis commonly "
+				+ $"happens when incorrectly accessing a region within a method that itself gets accessed by the "
+				+ $"RegionAndRoomUpdater when computing the region grid. The updater gets disabled to avoid a stack "
+				+ $"overflow.\n{new StackTrace(1, true)}");
+	}
+}
+
+public sealed class RoomPrepatches : ClassWithFishPrepatches
+{
+	public sealed class Regions_Patch : FishPrepatch
+	{
+		public override string Description { get; } = "Minor optimization by simplifying instructions";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredPropertyGetter(typeof(Room), nameof(Room.Regions));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(Regions_Replacement);
+
+		public static List<Region> Regions_Replacement(Room instance)
+		{
+			var tmpRegions = instance.tmpRegions;
+			var districts = instance.districts;
+
+			tmpRegions.Clear();
+			for (var i = 0; i < districts.Count; i++)
+				tmpRegions.AddRangeFast(districts[i].Regions);
+
+			return tmpRegions;
 		}
 	}
 }

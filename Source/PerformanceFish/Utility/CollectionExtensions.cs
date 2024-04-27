@@ -5,6 +5,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
 
 namespace PerformanceFish.Utility;
 
@@ -308,6 +310,28 @@ public static class CollectionExtensions
 	}
 
 	public static List<T> AsOrToList<T>(this IEnumerable<T> enumerable) => enumerable as List<T> ?? enumerable.ToList();
+
+	public static unsafe ref T GetReference<T>(this NativeArray<T> nativeArray, int index) where T : struct
+		=> ref Unsafe.AsRef<T>(Unsafe.Add<T>(NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(nativeArray),
+			index));
+
+	public static void UnwrapArray<T>(this List<T> list, out T[] array, out int count)
+	{
+		array = list._items;
+		count = list._size;
+		Guard.IsLessThanOrEqualTo(count, array.Length);
+	}
+	
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static void SetSize<T>(this List<T> list, int size) => list._size = size;
+
+	public static void AddRange<T>(this List<T> list, IndexedFishSet<T> set)
+	{
+		list.EnsureCapacity(list._size + set.Count);
+		set.CopyTo(list._items, list._size);
+		list._size += set.Count;
+		list._version++;
+	}
 	
 	[DoesNotReturn]
 	private static T ThrowForNoElements<T>()

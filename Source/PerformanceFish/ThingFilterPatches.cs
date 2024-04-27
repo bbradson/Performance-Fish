@@ -207,7 +207,7 @@ public sealed class ThingFilterPatches : ClassWithFishPatches
 
 	public record struct AllowedDefsListCacheValue() : ICacheable<ThingFilter>, ICacheable<ThingFilter, int>
 	{
-		public List<ThingDef> Defs = [];
+		public readonly List<ThingDef> Defs = [];
 		private int _nextRefreshTick = -2;
 
 		public bool Dirty

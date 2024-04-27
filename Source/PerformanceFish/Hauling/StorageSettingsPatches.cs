@@ -206,7 +206,7 @@ public sealed class StorageSettingsPatches : ClassWithFishPatches
 		public void Update(Thing thing, bool allowedToAccept)
 		{
 			_value = allowedToAccept.AsInt();
-			_nextUpdateTick = TickHelper.Add(512, thing.thingIDNumber, 128);
+			_nextUpdateTick = TickHelper.Add(2048, thing.thingIDNumber, 512);
 		}
 	}
 

@@ -7,17 +7,17 @@ using Mono.Cecil;
 using Mono.Cecil.Cil;
 using PerformanceFish.Prepatching;
 
-namespace PerformanceFish;
+namespace PerformanceFish.Defs;
 
 public sealed class WorkGiverDefFixes : ClassWithFishPrepatches
 {
 	public sealed class WorkerPatch : FishPrepatch
 	{
 		public override string? Description { get; }
-			= "RimWorld has no checks to verify that workGiverDefs include valid classes with their actual "
+			= "RimWorld has no checks to verify that WorkGiverDefs include valid classes with their actual "
 			+ "implementation. This means whenever mods either don't provide one or it simply fails to load for any "
 			+ "reason, entirely uninformative errors get spammed at the point pawns try starting a job at. This patch "
-			+ "here adds a check, logging the erroneous def with mod source when possible and disabling the workGiver "
+			+ "here adds a check, logging the erroneous def with mod source when possible and disabling the WorkGiver "
 			+ "from running to prevent the error spam.";
 
 		public override MethodBase TargetMethodBase { get; }
@@ -40,6 +40,7 @@ public sealed class WorkGiverDefFixes : ClassWithFishPrepatches
 			return instance.workerInt;
 		}
 
+		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static void TryFixAndLogError(WorkGiverDef instance)
 		{
 			instance.giverClass = typeof(WorkGiver_AlwaysSkip);

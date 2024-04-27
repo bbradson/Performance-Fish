@@ -6,14 +6,13 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection.Emit;
-using System.Runtime.InteropServices;
 using System.Security;
 using System.Threading.Tasks;
 using PerformanceFish.Cache;
 using PerformanceFish.ModCompatibility;
 using ConstructorInfoCache
 	= PerformanceFish.Cache.ByReference<System.RuntimeTypeHandle, System.Reflection.BindingFlags,
-		PerformanceFish.System.ReflectionCaching.ByValueComparableArray<System.Type>,
+		PerformanceFish.System.ReflectionCaching.RecordArray<System.Type>,
 		PerformanceFish.System.ReflectionCaching.TypePatches.ConstructorInfoCacheValue>;
 using FieldGetters
 	= PerformanceFish.Cache.ByReferenceUnclearable<System.RuntimeFieldHandle,
@@ -21,6 +20,9 @@ using FieldGetters
 using FieldInfoCache
 	= PerformanceFish.Cache.ByReference<System.RuntimeTypeHandle, System.Reflection.BindingFlags, string,
 		PerformanceFish.System.ReflectionCaching.TypePatches.FieldInfoCacheValue>;
+using FieldInfosCache
+	= PerformanceFish.Cache.ByReference<System.RuntimeTypeHandle, System.Reflection.BindingFlags,
+		PerformanceFish.System.ReflectionCaching.TypePatches.FieldInfosCacheValue>;
 using FieldSetters
 	= PerformanceFish.Cache.ByReferenceUnclearable<System.RuntimeFieldHandle,
 		PerformanceFish.System.ReflectionCaching.FieldInfoPatches.FieldInfoSetterCache>;
@@ -29,11 +31,11 @@ using MethodInfoCache
 		PerformanceFish.System.ReflectionCaching.TypePatches.MethodInfoCacheValue>;
 using MethodInfoWithTypesAndFlagsCache
 	= PerformanceFish.Cache.ByReference<System.RuntimeTypeHandle, System.Reflection.BindingFlags, string,
-		PerformanceFish.System.ReflectionCaching.ByValueComparableArray<System.Type>,
+		PerformanceFish.System.ReflectionCaching.RecordArray<System.Type>,
 		PerformanceFish.System.ReflectionCaching.TypePatches.MethodInfoCacheValue>;
 using MethodInfoWithTypesCache
 	= PerformanceFish.Cache.ByReference<System.RuntimeTypeHandle, string,
-		PerformanceFish.System.ReflectionCaching.ByValueComparableArray<System.Type>,
+		PerformanceFish.System.ReflectionCaching.RecordArray<System.Type>,
 		PerformanceFish.System.ReflectionCaching.TypePatches.MethodInfoCacheValue>;
 using MethodInvokers
 	= PerformanceFish.Cache.ByReferenceUnclearable<System.RuntimeMethodHandle,
@@ -41,9 +43,6 @@ using MethodInvokers
 using PropertyInfoCache
 	= PerformanceFish.Cache.ByReference<System.RuntimeTypeHandle, System.Reflection.BindingFlags, string,
 		PerformanceFish.System.ReflectionCaching.TypePatches.PropertyInfoCacheValue>;
-using CustomAttributeCache
-	= PerformanceFish.Cache.ByReference<System.Reflection.ICustomAttributeProvider, System.RuntimeTypeHandle, bool,
-		PerformanceFish.System.ReflectionCaching.MonoCustomAttrs.CustomAttributeCacheValue>;
 using TypeFullNameCache
 	= PerformanceFish.Cache.ByReferenceUnclearable<System.RuntimeTypeHandle,
 		PerformanceFish.System.ReflectionCaching.TypePatches.TypeFullNameCacheValue>;
@@ -54,6 +53,9 @@ using ActivatorCache
 // 	= PerformanceFish.Cache.ByReference<System.RuntimeTypeHandle,
 // 		PerformanceFish.System.ReflectionCaching.ByValueComparableArray<System.Type>,
 // 		PerformanceFish.System.ReflectionCaching.ActivatorPatches.ActivatorCacheValue>;
+using CustomAttributeCache
+	= PerformanceFish.Cache.ByReferenceClassic<System.Reflection.ICustomAttributeProvider, System.RuntimeTypeHandle, bool,
+		PerformanceFish.System.ReflectionCaching.MonoCustomAttrs.CustomAttributeCacheValue>;
 
 namespace PerformanceFish.System;
 
@@ -66,12 +68,17 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 			ConstructorInfoCache.Initialize();
 			FieldGetters.Initialize();
 			FieldInfoCache.Initialize();
+			FieldInfosCache.Initialize();
 			FieldSetters.Initialize();
 			MethodInfoCache.Initialize();
 			MethodInfoWithTypesAndFlagsCache.Initialize();
 			MethodInfoWithTypesCache.Initialize();
 			MethodInvokers.Initialize();
 			PropertyInfoCache.Initialize();
+			TypeFullNameCache.Initialize();
+			ActivatorCache.Initialize();
+			// ActivatorWithArgumentsCache.Initialize();
+			CustomAttributeCache.Initialize();
 		}
 		catch (Exception ex)
 		{
@@ -104,16 +111,17 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 					ToLowerIfNeededForBindingFlags(name, bindingAttr));
 
 				__result = FieldInfoCache.Get.GetOrAdd(ref key).Info;
+				__state.Flags = bindingAttr;
 
-				if (__result is null)
+				if (__result != null)
 				{
-					__state = new() { State = true, Flags = bindingAttr };
-					return true;
+					__state.State = false;
+					return false;
 				}
 				else
 				{
-					__state = new() { State = false, Flags = bindingAttr };
-					return false;
+					__state.State = true;
+					return true;
 				}
 			}
 
@@ -131,6 +139,47 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 				=> FieldInfoCache.GetExistingReference(__instance.TypeHandle, __state.Flags,
 						ToLowerIfNeededForBindingFlags(name, __state.Flags)).Info
 					= __result;
+		}
+		
+		public sealed class GetFieldsPatch : FishPatch
+		{
+			public override string Description { get; } = "Caches GetFields lookups";
+
+			public override MethodBase TargetMethodInfo { get; }
+				= AccessTools.Method(typeof(RuntimeType), nameof(RuntimeType.GetFields), [typeof(BindingFlags)])!;
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static bool Prefix(Type __instance, BindingFlags bindingAttr, out FieldInfo[]? __result,
+				out bool __state)
+			{
+				var key = new FieldInfosCache(__instance.TypeHandle, bindingAttr);
+
+				__result = FieldInfosCache.Get.GetOrAdd(ref key).Info;
+
+				if (__result != null)
+				{
+					__state = false;
+					return false;
+				}
+				else
+				{
+					__state = true;
+					return true;
+				}
+			}
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static void Postfix(Type __instance, FieldInfo[] __result, BindingFlags bindingAttr, bool __state)
+			{
+				if (!__state)
+					return;
+
+				UpdateCache(__instance, __result, bindingAttr);
+			}
+
+			[MethodImpl(MethodImplOptions.NoInlining)]
+			private static void UpdateCache(Type __instance, FieldInfo[] __result, BindingFlags bindingAttr)
+				=> FieldInfosCache.GetExistingReference(__instance.TypeHandle, bindingAttr).Info = __result;
 		}
 
 		public sealed class GetMethodWithFlags_Patch : FishPatch
@@ -400,6 +449,11 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 			public FieldInfo? Info;
 		}
 
+		public record struct FieldInfosCacheValue
+		{
+			public FieldInfo[]? Info;
+		}
+
 		public record struct MethodInfoCacheValue
 		{
 			public MethodInfo? Info;
@@ -506,33 +560,35 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 		}
 	}
 
-	[StructLayout(LayoutKind.Sequential, Pack = 1)]
-	public record struct ByValueComparableArray<T>
+	public record struct RecordArray<T>
 		where T : class
 	{
-		public byte Length;
 		private int _hashCode;
-		public T[] Array;
+		public T[]? Array;
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public ByValueComparableArray(T[] array)
+		public RecordArray(T[] array)
 		{
 			Guard.IsNotNull(array);
 			Guard.IsLessThanOrEqualTo(array.Length, byte.MaxValue);
 			Array = array;
-			Length = (byte)array.Length;
-			_hashCode = HashCode.Combine((int)Length, Length > 0 && Array[0] is { } item ? item.GetHashCode() : 0);
+			var length = array.Length;
+			_hashCode = HashCode.Combine(length, length > 0 && Array[0] is { } item ? item.GetHashCode() : 0);
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public bool Equals(ByValueComparableArray<T> other)
+		public bool Equals(RecordArray<T> other)
 		{
-			if (Length != other.Length)
+			if (Array is null)
+				return other.Array is null;
+
+			if (other.Array is null || Array.Length != other.Array.Length)
 				return false;
 
-			for (var i = 0; i < Length; i++)
+			var length = Array.Length;
+			for (var i = 0; i < length; i++)
 			{
-				if (!Array[i].Equals(other.Array[i]))
+				if (!Array[i].Equals(other.Array![i]))
 					return false;
 			}
 
@@ -540,8 +596,7 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 		}
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public override int GetHashCode()
-			=> _hashCode;
+		public override int GetHashCode() => _hashCode;
 	}
 
 	public sealed class ActivatorPatches
@@ -744,7 +799,7 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 				cache.Task = _fieldSetterFailureTask;
 				Log.Error($"FieldInfo.SetValue has been called on '{
 					info.FullDescription()}'. This is a const that gets copied at compile time. An attempt at "
-					+ $"setting a value will always fail.\n{new StackTrace(true)}");
+					+ $"setting a value will always fail.\n{new StackTrace(2, true)}");
 				
 				return false;
 			}

@@ -5,7 +5,7 @@
 
 using PerformanceFish.Prepatching;
 
-namespace PerformanceFish;
+namespace PerformanceFish.Rendering;
 
 public sealed class ContentFinderCaching : ClassWithFishPrepatches
 {
@@ -22,7 +22,7 @@ public sealed class ContentFinderCaching : ClassWithFishPrepatches
 		{
 			ref var cache = ref Cache.ByReference<string, CacheValue<T>>.GetOrAddReference(itemPath);
 			
-			if (!cache.Cached || !OnStartup.State.Initialized)
+			if (!cache.Cached)
 				return __state = true;
 			
 			__result = cache.Value;
@@ -42,6 +42,9 @@ public sealed class ContentFinderCaching : ClassWithFishPrepatches
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		private static void UpdateCache<T>(string itemPath, T? __result)
 		{
+			if (!OnStartup.State.Initialized)
+				return;
+			
 			ref var cache = ref Cache.ByReference<string, CacheValue<T>>.GetExistingReference(itemPath);
 
 			cache.Cached = true;

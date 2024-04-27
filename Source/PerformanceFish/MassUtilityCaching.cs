@@ -112,7 +112,7 @@ public sealed class MassUtilityCaching : ClassWithFishPatches
 		public void Update(float mass, Pawn p)
 		{
 			Mass = mass;
-			//shorter refresh interval because of stack sizes not being considered by the listVersion check
+			// shorter refresh interval because of stack sizes not being considered by the listVersion check
 			_nextRefreshTick = TickHelper.Add(GenTicks.TickRareInterval, p.thingIDNumber);
 			_inventoryListsState = GetInventoryListsState(p); 
 		}

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutDir>..\..\1.5\Assemblies\</OutDir>
+		<Copyright>Copyright (c) 2024 Bradson</Copyright>
+	</PropertyGroup>
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+		<DefineConstants>DEBUG;V1_5</DefineConstants>
+	</PropertyGroup>
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+		<DefineConstants>V1_5</DefineConstants>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="Krafs.Rimworld.Ref" Version="1.5.*" />
+		<PackageReference Include="Lib.Harmony" Version="2.3.*" ExcludeAssets="runtime" />
+		<Reference Include="1Fishery">
+			<HintPath>..\..\..\Fishery\1.5\Assemblies\1Fishery.dll</HintPath>
+			<Private>False</Private>
+		</Reference>
+	</ItemGroup>
+</Project>

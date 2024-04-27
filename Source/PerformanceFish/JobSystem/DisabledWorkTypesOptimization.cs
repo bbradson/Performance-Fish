@@ -3,6 +3,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+#if V1_4
 using PerformanceFish.ModCompatibility;
 
 namespace PerformanceFish.JobSystem;
@@ -28,3 +29,4 @@ public sealed class DisabledWorkTypesOptimization : ClassWithFishPatches
 				: __instance.cachedDisabledWorkTypes) is null;
 	}
 }
+#endif

@@ -9,7 +9,11 @@ public sealed class Pawn_PsychicEntropyTrackerOptimization : ClassWithFishPatche
 {
 	public sealed class Psylink_Patch : FirstPriorityFishPatch
 	{
-		public override string Description { get; } = "Caches/throttles the psylink method to only update every 32 ticks.";
+		public override List<Type> LinkedPatches { get; }
+			= [typeof(HediffSetCaching.DirtyCache)];
+		
+		public override string Description { get; }
+			= "Caches/throttles the psylink method to only update on hediff changes or after 128 ticks";
 
 		public override MethodBase TargetMethodInfo { get; }
 			= AccessTools.PropertyGetter(typeof(Pawn_PsychicEntropyTracker),
@@ -22,7 +26,7 @@ public sealed class Pawn_PsychicEntropyTrackerOptimization : ClassWithFishPatche
 			if (__instance.psylinkCachedForTick <= TickHelper.TicksGame)
 			{
 				__instance.psylinkCached = __instance.pawn.GetMainPsylinkSource();
-				__instance.psylinkCachedForTick = TickHelper.TicksGame + 32;
+				__instance.psylinkCachedForTick = TickHelper.TicksGame + 128;
 			}
 
 			return __instance.psylinkCached;

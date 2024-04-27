@@ -8,14 +8,20 @@ namespace PerformanceFish;
 public record struct CellIndex(int Value)
 {
 	public int Value = Value;
-	
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public CellIndex(IntVec3 cell, Map map) : this(cell, map.cellIndices.mapSizeX) {}
-	
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public CellIndex(IntVec3 cell, int mapSizeX) : this(cell.CellToIndex(mapSizeX)) {}
 
 	public IntVec3 ToCell(Map map) => ToCell(map.cellIndices.mapSizeX);
 	
 	public IntVec3 ToCell(int mapSizeX) => CellIndicesUtility.IndexToCell(Value, mapSizeX);
 
-	public List<Thing> GetThingList(Map map) => map.thingGrid.ThingsListAtFast(Value);
+	public List<Thing> GetThingList(Map map) => map.thingGrid.thingGrid[Value];
+
+	public bool IsFogged(Map map) => map.fogGrid.fogGrid[Value];
+
+	public float GetSnowDepth(Map map) => map.snowGrid.depthGrid[Value];
 }

@@ -141,11 +141,16 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
 
-		public static void ReplacementBody(Thing t, Pawn carrier, Map map, Faction faction, SlotGroup? slotGroup,
+		public static void ReplacementBody(Thing t, Pawn carrier, Map map, Faction faction,
+#if V1_4
+			SlotGroup? slotGroup,
+#else
+			ISlotGroup? slotGroup,
+#endif
 			bool needAccurateResult, ref IntVec3 closestSlot, ref float closestDistSquared,
 			ref StoragePriority foundPriority)
 		{
-			if (slotGroup == null || !slotGroup.parent.Accepts(t) || !CapacityAllows(slotGroup, t))
+			if (slotGroup == null || !slotGroup.Settings.AllowedToAccept(t) || !CapacityAllows(slotGroup, t))
 				return;
 			
 			var thingPosition = t.SpawnedOrAnyParentSpawned ? t.PositionHeld : carrier.PositionHeld;
@@ -194,9 +199,18 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			}
 		}
 
+#if V1_4
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static StorageDistrict[] GetDistricts(SlotGroup slotGroup) => slotGroup.Districts();
 		// wrapper for analyzer compatibility, as it otherwise throws on ref returns
+#else
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static StorageDistrict[] GetDistricts(ISlotGroup iSlotGroup)
+			=> iSlotGroup is SlotGroup slotGroup ? slotGroup.Districts() : StorageDistrict.GetDefaultArray();
+#endif
+
+		public static bool CapacityAllows(ISlotGroup iSlotGroup, Thing t)
+			=> iSlotGroup is not SlotGroup slotGroup || CapacityAllows(slotGroup, t);
 		
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static bool CapacityAllows(SlotGroup slotGroup, Thing t)
@@ -218,9 +232,9 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 	public sealed class TryFindBestBetterStoreCellForPatch : FishPrepatch
 	{
 		public override string? Description { get; }
-			= "Optimizes a loop in the method to make use of cached storage priorities for fewer comparisons against "
-			+ "those. Also removes haulables from ListerHaulables if the found best store cell turns out to be the "
-			+ "current cell";
+			= "Optimizes a loop in the method to treat storage groups as proper groups without duplicate checks and to "
+			+ "make use of cached storage priorities for fewer comparisons against those. Also removes haulables from "
+			+ "ListerHaulables if the found best store cell turns out to be the current cell";
 
 		public override MethodBase TargetMethodBase { get; } = methodof(StoreUtility.TryFindBestBetterStoreCellFor);
 

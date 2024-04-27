@@ -86,7 +86,7 @@ public sealed class EquatableValueTypeEqualityComparer<T> : EqualityComparer<T> 
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object? obj) => obj is EquatableValueTypeEqualityComparer<T>;
+	public override bool Equals(object? obj) => obj?.GetType() == typeof(EquatableValueTypeEqualityComparer<T>);
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
@@ -106,7 +106,7 @@ public sealed class EquatableNullableEqualityComparer<T> : EqualityComparer<T?> 
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object? obj) => obj is EquatableNullableEqualityComparer<T>;
+	public override bool Equals(object? obj) => obj?.GetType() == typeof(EquatableNullableEqualityComparer<T>);
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
@@ -126,7 +126,7 @@ public sealed class NullableEqualityComparer<T> : EqualityComparer<T?> where T :
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object? obj) => obj is NullableEqualityComparer<T>;
+	public override bool Equals(object? obj) => obj?.GetType() == typeof(NullableEqualityComparer<T>);
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
@@ -135,7 +135,6 @@ public sealed class NullableEqualityComparer<T> : EqualityComparer<T?> where T :
 public sealed class StringEqualityComparer : EqualityComparer<string?>
 {
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	[SuppressMessage("Globalization", "CA1307")]
 	[SuppressMessage("Globalization", "CA1309")]
 	public override bool Equals(string? x, string? y)
 		=> string.Equals(x, y); // already does a null check, so this skips the extra check that'd otherwise happen
@@ -146,7 +145,7 @@ public sealed class StringEqualityComparer : EqualityComparer<string?>
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object? obj) => obj is StringEqualityComparer;
+	public override bool Equals(object? obj) => obj?.GetType() == typeof(StringEqualityComparer);
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
@@ -163,7 +162,7 @@ public sealed class IntEqualityComparer : EqualityComparer<int>
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object? obj) => obj is IntEqualityComparer;
+	public override bool Equals(object? obj) => obj?.GetType() == typeof(IntEqualityComparer);
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
@@ -180,7 +179,7 @@ public sealed class UshortEqualityComparer : EqualityComparer<ushort>
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object? obj) => obj is UshortEqualityComparer;
+	public override bool Equals(object? obj) => obj?.GetType() == typeof(UshortEqualityComparer);
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
@@ -199,7 +198,7 @@ public sealed class ReferenceEqualityComparer<T> : EqualityComparer<T>
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object? obj) => obj is ReferenceEqualityComparer<T>;
+	public override bool Equals(object? obj) => obj?.GetType() == typeof(ReferenceEqualityComparer<T>);
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }
@@ -218,7 +217,7 @@ public sealed class ValueTypeEqualityComparer<T> : EqualityComparer<T> where T :
 	/// <summary>
 	/// Equals method for the comparer itself.
 	/// </summary>
-	public override bool Equals(object? obj) => obj is ReferenceEqualityComparer<T>;
+	public override bool Equals(object? obj) => obj?.GetType() == typeof(ReferenceEqualityComparer<T>);
 
 	public override int GetHashCode() => GetType().Name.GetHashCode();
 }

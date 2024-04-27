@@ -5,6 +5,7 @@
 
 using JetBrains.Annotations;
 // ReSharper disable ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
+// ReSharper disable WithExpressionModifiesAllMembers
 
 namespace PerformanceFish.Cache;
 
@@ -25,12 +26,12 @@ public record struct ByInt<T, TResult> where T : notnull where TResult : new()
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override int GetHashCode() => Key;
-
-	private static List<FishTable<ByInt<T, TResult>, TResult>> _allCaches = [];
 	
-	private static object _valueInitializerLock = new();
+	private static readonly object _valueInitializerLock = new();
 
-	private static FishTable<ByInt<T, TResult>, TResult> _get = InitializeNew();
+	private static readonly List<IDictionary> _allCaches = [];
+
+	private static readonly FishTable<ByInt<T, TResult>, TResult> _get = InitializeNew();
 
 	[ThreadStatic]
 	private static FishTable<ByInt<T, TResult>, TResult>? _getThreadStatic;
@@ -75,16 +76,10 @@ public record struct ByInt<T, TResult> where T : notnull where TResult : new()
 	public static ref TResult GetOrAddReference(ByInt<T, TResult> key) => ref Get.GetOrAddReference(key);
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static ref TResult GetOrAddReference(ref ByInt<T, TResult> key) => ref Get.GetOrAddReference(ref key);
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static TResult GetOrAdd(int key) => Get.GetOrAdd(Unsafe.As<int, ByInt<T, TResult>>(ref key));
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static TResult GetOrAdd(ByInt<T, TResult> key) => Get.GetOrAdd(key);
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static TResult GetOrAdd(ref ByInt<T, TResult> key) => Get.GetOrAdd(ref key);
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static ref TResult GetExistingReference(int key)
@@ -95,23 +90,9 @@ public record struct ByInt<T, TResult> where T : notnull where TResult : new()
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static FishTable<ByInt<T, TResult>, TResult> InitializeNew()
-	{
-		var newCache = Utility.AddNew(ValueInitializer);
-		
-		lock (_allCaches)
-			_allCaches.Add(newCache);
-		
-		return newCache;
-	}
+		=> Utility.AddNew(_allCaches, ValueInitializer);
 
-	public static void Clear()
-	{
-		lock (_allCaches)
-		{
-			foreach (var cache in _allCaches)
-				cache.Clear();
-		}
-	}
+	public static void Clear() => Utility.Internal.ClearIn(_allCaches);
 }
 
 [PublicAPI]
@@ -120,11 +101,11 @@ public record struct ByInt<T1, T2, TResult>
 {
 	public int First, Second;
 	
-	private static List<FishTable<ByInt<T1, T2, TResult>, TResult>> _allCaches = [];
+	private static readonly object _valueInitializerLock = new();
 	
-	private static object _valueInitializerLock = new();
+	private static readonly List<IDictionary> _allCaches = [];
 	
-	private static FishTable<ByInt<T1, T2, TResult>, TResult> _get = InitializeNew();
+	private static readonly FishTable<ByInt<T1, T2, TResult>, TResult> _get = InitializeNew();
 
 	[ThreadStatic]
 	private static FishTable<ByInt<T1, T2, TResult>, TResult>? _getThreadStatic;
@@ -173,7 +154,7 @@ public record struct ByInt<T1, T2, TResult>
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static ref TResult GetOrAddReference(int first, int second)
-		=> ref Get.GetOrAddReference(new() { First = first, Second = second });
+		=> ref Get.GetOrAddReference(default(ByInt<T1, T2, TResult>) with { First = first, Second = second });
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static ref TResult GetOrAddReference(in ByInt<T1, T2, TResult> key)
@@ -181,14 +162,14 @@ public record struct ByInt<T1, T2, TResult>
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static TResult GetOrAdd(int first, int second)
-		=> Get.GetOrAdd(new() { First = first, Second = second });
+		=> Get.GetOrAdd(default(ByInt<T1, T2, TResult>) with { First = first, Second = second });
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static TResult GetOrAdd(in ByInt<T1, T2, TResult> key) => Get.GetOrAdd(ref Unsafe.AsRef(in key));
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static ref TResult GetExistingReference(int first, int second)
-		=> ref Get.GetReference(new() { First = first, Second = second });
+		=> ref Get.GetReference(default(ByInt<T1, T2, TResult>) with { First = first, Second = second });
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static ref TResult GetExistingReference(T1 first, T2 second)
@@ -217,23 +198,9 @@ public record struct ByInt<T1, T2, TResult>
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	private static FishTable<ByInt<T1, T2, TResult>, TResult> InitializeNew()
-	{
-		var newCache = Utility.AddNew(ValueInitializer);
-		
-		lock (_allCaches)
-			_allCaches.Add(newCache);
-		
-		return newCache;
-	}
+		=> Utility.AddNew(_allCaches, ValueInitializer);
 
-	public static void Clear()
-	{
-		lock (_allCaches)
-		{
-			foreach (var cache in _allCaches)
-				cache.Clear();
-		}
-	}
+	public static void Clear() => Utility.Internal.ClearIn(_allCaches);
 }
 
 [PublicAPI]
@@ -242,16 +209,39 @@ public record struct ByInt<T1, T2, T3, TResult>
 {
 	public int First, Second, Third;
 	
-	private static FishTable<ByInt<T1, T2, T3, TResult>, TResult> _get
-		= Utility.AddNew<ByInt<T1, T2, T3, TResult>, TResult>();
+	private static readonly object _valueInitializerLock = new();
+	
+	private static readonly List<IDictionary> _allCaches = [];
+	
+	private static FishTable<ByInt<T1, T2, T3, TResult>, TResult> _get = InitializeNew();
 
 	[ThreadStatic]
 	private static FishTable<ByInt<T1, T2, T3, TResult>, TResult>? _getThreadStatic;
 
+	private static Func<ByInt<T1, T2, T3, TResult>, TResult>? _valueInitializer;
+	
+	public static Func<ByInt<T1, T2, T3, TResult>, TResult>? ValueInitializer
+	{
+		get
+		{
+			lock (_valueInitializerLock)
+				return _valueInitializer;
+		}
+		set
+		{
+			lock (_valueInitializerLock)
+			{
+				value ??= static _ => Reflection.New<TResult>();
+				_valueInitializer = value;
+				_get.ValueInitializer = value;
+			}
+		}
+	}
+
 	public static FishTable<ByInt<T1, T2, T3, TResult>, TResult> Get
 	{
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		get => _getThreadStatic ??= Utility.AddNew<ByInt<T1, T2, T3, TResult>, TResult>();
+		get => _getThreadStatic ??= InitializeNew();
 	}
 
 	public static FishTable<ByInt<T1, T2, T3, TResult>, TResult> GetDirectly
@@ -263,7 +253,7 @@ public record struct ByInt<T1, T2, T3, TResult>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static unsafe ref TResult GetOrAddReference(int first, int second, int third)
 	{
-		var key = new ByInt<T1, T2, T3, TResult> { First = first, Second = second, Third = third };
+		var key = default(ByInt<T1, T2, T3, TResult>) with { First = first, Second = second, Third = third };
 		return ref Get.GetOrAddReference(ref key);
 	}
 
@@ -273,7 +263,10 @@ public record struct ByInt<T1, T2, T3, TResult>
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static ref TResult GetExistingReference(int first, int second, int third)
-		=> ref Get.GetReference(new() { First = first, Second = second, Third = third });
+		=> ref Get.GetReference(default(ByInt<T1, T2, T3, TResult>) with
+		{
+			First = first, Second = second, Third = third
+		});
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static ref TResult GetExistingReference(T1 first, T2 second, T3 third)
@@ -295,6 +288,12 @@ public record struct ByInt<T1, T2, T3, TResult>
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override int GetHashCode() => HashCode.Combine(First, Second, Third);
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static FishTable<ByInt<T1, T2, T3, TResult>, TResult> InitializeNew()
+		=> Utility.AddNew(_allCaches, ValueInitializer);
+
+	public static void Clear() => Utility.Internal.ClearIn(_allCaches);
 }
 
 [PublicAPI]
@@ -304,16 +303,39 @@ public record struct ByInt<T1, T2, T3, T4, TResult>
 {
 	public int First, Second, Third, Fourth;
 	
-	private static FishTable<ByInt<T1, T2, T3, T4, TResult>, TResult> _get
-		= Utility.AddNew<ByInt<T1, T2, T3, T4, TResult>, TResult>();
+	private static readonly object _valueInitializerLock = new();
+	
+	private static readonly List<IDictionary> _allCaches = [];
+	
+	private static FishTable<ByInt<T1, T2, T3, T4, TResult>, TResult> _get = InitializeNew();
 
 	[ThreadStatic]
 	private static FishTable<ByInt<T1, T2, T3, T4, TResult>, TResult>? _getThreadStatic;
 
+	private static Func<ByInt<T1, T2, T3, T4, TResult>, TResult>? _valueInitializer;
+	
+	public static Func<ByInt<T1, T2, T3, T4, TResult>, TResult>? ValueInitializer
+	{
+		get
+		{
+			lock (_valueInitializerLock)
+				return _valueInitializer;
+		}
+		set
+		{
+			lock (_valueInitializerLock)
+			{
+				value ??= static _ => Reflection.New<TResult>();
+				_valueInitializer = value;
+				_get.ValueInitializer = value;
+			}
+		}
+	}
+
 	public static FishTable<ByInt<T1, T2, T3, T4, TResult>, TResult> Get
 	{
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		get => _getThreadStatic ??= Utility.AddNew<ByInt<T1, T2, T3, T4, TResult>, TResult>();
+		get => _getThreadStatic ??= InitializeNew();
 	}
 
 	public static FishTable<ByInt<T1, T2, T3, T4, TResult>, TResult> GetDirectly
@@ -325,7 +347,7 @@ public record struct ByInt<T1, T2, T3, T4, TResult>
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static unsafe ref TResult GetOrAddReference(int first, int second, int third, int fourth)
 	{
-		var key = new ByInt<T1, T2, T3, T4, TResult>
+		var key = default(ByInt<T1, T2, T3, T4, TResult>) with
 		{
 			First = first, Second = second, Third = third, Fourth = fourth
 		};
@@ -338,7 +360,10 @@ public record struct ByInt<T1, T2, T3, T4, TResult>
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static ref TResult GetExistingReference(int first, int second, int third, int fourth)
-		=> ref Get.GetReference(new() { First = first, Second = second, Third = third, Fourth = fourth });
+		=> ref Get.GetReference(default(ByInt<T1, T2, T3, T4, TResult>) with
+		{
+			First = first, Second = second, Third = third, Fourth = fourth
+		});
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public static ref TResult GetExistingReference(T1 first, T2 second, T3 third, T4 fourth)
@@ -361,5 +386,11 @@ public record struct ByInt<T1, T2, T3, T4, TResult>
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public override int GetHashCode() => HashCode.Combine(First, Second, Third, Fourth);
+
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static FishTable<ByInt<T1, T2, T3, T4, TResult>, TResult> InitializeNew()
+		=> Utility.AddNew(_allCaches, ValueInitializer);
+
+	public static void Clear() => Utility.Internal.ClearIn(_allCaches);
 }
 #pragma warning restore CS9091

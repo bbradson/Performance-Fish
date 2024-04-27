@@ -3,6 +3,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+#if V1_4
 using static System.Reflection.Emit.OpCodes;
 
 namespace PerformanceFish.Hediffs;
@@ -49,3 +50,4 @@ public sealed class HediffComp_PsychicHarmonizer_Bugfix : ClassWithFishPatches
 		}
 	}
 }
+#endif

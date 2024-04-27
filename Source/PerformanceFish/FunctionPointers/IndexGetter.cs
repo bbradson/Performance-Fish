@@ -19,21 +19,31 @@ public static class IndexGetter
 	[UsedImplicitly(ImplicitUseTargetFlags.Members)]
 	public static class Methods
 	{
-		public static int HediffSet(HediffSet set) => set.pawn.thingIDNumber;
-		public static int HediffDef(HediffDef def) => def.shortHash;
+		public static int Ability(Ability ability) => ability.Id;
 		public static int Bill(Bill bill) => bill.loadID;
-		public static int Pawn(Pawn pawn) => pawn.thingIDNumber;
-		public static int Thing(Thing thing) => thing.thingIDNumber;
-		public static int CompAssignableToPawn_Bed(CompAssignableToPawn_Bed comp) => comp.parent.thingIDNumber;
-		public static int Map(Map map) => map.uniqueID;
+		public static int Def(Def def) => def.shortHash;
 		public static int DesignationManager(DesignationManager manager) => manager.map.uniqueID;
-		public static int DesignationDef(DesignationDef def) => def.shortHash;
-		public static int Room(Room room) => room.ID;
-		public static int Ideo(Ideo ideo) => ideo.id;
-		public static int RecipeDef(RecipeDef def) => def.shortHash;
-		public static int RuntimeTypeHandle(RuntimeTypeHandle handle) => (int)handle.Value;
-		public static int WorldObject(WorldObject worldObject) => worldObject.ID;
 		public static int Hediff(Hediff hediff) => hediff.loadID;
+		public static int HediffComp(HediffComp comp) => comp.parent.loadID;
+		public static int HediffSet(HediffSet set) => set.pawn.thingIDNumber;
+		public static int Ideo(Ideo ideo) => ideo.id;
+		public static int Map(Map map) => map.uniqueID;
+		public static int Room(Room room) => room.ID;
+		public static int RuntimeTypeHandle(RuntimeTypeHandle handle) => (int)handle.Value;
+		public static int Thing(Thing thing) => thing.thingIDNumber;
+		public static int ThingComp(ThingComp comp) => comp.parent.thingIDNumber;
+		public static int ThingRequestGroup(ThingRequestGroup group) => (byte)group;
+		public static int WorldObject(WorldObject worldObject) => worldObject.ID;
+		public static int WorldObjectComp(WorldObjectComp comp) => comp.parent.ID;
+		
+		public static int CompAssignableToPawn_Bed(CompAssignableToPawn_Bed comp) => comp.parent.thingIDNumber;
+		public static int DesignationDef(DesignationDef def) => def.shortHash;
+		public static int HediffDef(HediffDef def) => def.shortHash;
+		public static int HediffWithComps(HediffWithComps hediff) => hediff.loadID;
+		public static int Pawn(Pawn pawn) => pawn.thingIDNumber;
+		public static int RecipeDef(RecipeDef def) => def.shortHash;
+		public static int ThingDef(ThingDef def) => def.shortHash;
+		public static int ThingWithComps(ThingWithComps thing) => thing.thingIDNumber;
 	}
 
 	internal static Cache.IndexGetter<T> GetDefaultIndexGetter<T>() where T : notnull

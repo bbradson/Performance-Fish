@@ -27,6 +27,23 @@ public sealed class Buildings : ClassWithFishPrepatches
 			=> (IEnumerable<T>)__instance.Cache().ColonistBuildingsByType.GetOrAdd(typeof(T));
 	}
 	
+#if !V1_4
+	public sealed class AllColonistBuildingsOfTypePatch : FishPrepatch
+	{
+		public override string Description { get; }
+			= "Same as AllBuildingsColonistOfClass, just there as a new copy in 1.5";
+		
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerBuildings), nameof(ListerBuildings.AllColonistBuildingsOfType));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody<Building>);
+
+		public static IEnumerable<T> ReplacementBody<T>(ListerBuildings __instance)
+			=> (IEnumerable<T>)__instance.Cache().ColonistBuildingsByType.GetOrAdd(typeof(T));
+	}
+#endif
+	
 	public sealed class ColonistsHaveResearchBenchPatch : FishPrepatch
 	{
 		public override string Description { get; }
@@ -60,6 +77,72 @@ public sealed class Buildings : ClassWithFishPrepatches
 			=> __instance.Cache().ColonistBuildingsByDef.GetOrAdd(def).Count > 0;
 	}
 
+#if !V1_4
+	public sealed class AllBuildingsColonistOfGroup_Patch : FishPrepatch
+	{
+		public override string Description { get; }
+			= "Optimizes building lookups by group on ListerBuildings to directly return the result of cached "
+			+ "data instead of iterating over all buildings on the map trying to find all matches";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerBuildings), nameof(ListerBuildings.AllBuildingsColonistOfGroup));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		public static List<Building> ReplacementBody(ListerBuildings __instance, ThingRequestGroup group)
+		{
+			var result = ListerBuildings.allBuildingsColonistOfGroupResult;
+			result.Clear();
+			
+			if (group == ThingRequestGroup.Undefined)
+				return result;
+
+			var listerThings = TryGetListerThings(__instance);
+			if (listerThings != null)
+			{
+				var thingsOfGroup = listerThings.ThingsInGroup(group);
+				var playerFaction = Faction.OfPlayerSilentFail;
+				for (var i = 0; i < thingsOfGroup.Count; i++)
+				{
+					if (thingsOfGroup[i] is Building building && building.Faction == playerFaction)
+						result.Add(building);
+				}
+			}
+			else
+			{
+				FallbackLoop(__instance, group);
+			}
+			
+			return result;
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static void FallbackLoop(ListerBuildings listerBuildings, ThingRequestGroup group)
+		{
+			var allBuildingsColonist = listerBuildings.allBuildingsColonist;
+			
+			for (var i = 0; i < allBuildingsColonist.Count; i++)
+			{
+				if (group.Includes(allBuildingsColonist[i].def))
+					ListerBuildings.allBuildingsColonistOfGroupResult.Add(allBuildingsColonist[i]);
+			}
+		}
+
+		public static ListerThings? TryGetListerThings(ListerBuildings listerBuildings)
+		{
+			var maps = Current.Game.Maps;
+			for (var i = 0; i < maps.Count; i++)
+			{
+				if (maps[i].listerBuildings == listerBuildings)
+					return maps[i].listerThings;
+			}
+
+			return null;
+		}
+	}
+#endif
+
 	public sealed class AllBuildingsColonistOfDef_Patch : FishPrepatch
 	{
 		public override string Description { get; }
@@ -73,8 +156,18 @@ public sealed class Buildings : ClassWithFishPrepatches
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
 
+#if !V1_5
 		public static IEnumerable<Building> ReplacementBody(ListerBuildings __instance, ThingDef def)
 			=> __instance.Cache().ColonistBuildingsByDef.GetOrAdd(def);
+#else
+		public static List<Building> ReplacementBody(ListerBuildings __instance, ThingDef def)
+		{
+			var result = ListerBuildings.allBuildingsColonistOfDefResult;
+			result.Clear();
+			result.AddRange(__instance.Cache().ColonistBuildingsByDef.GetOrAdd(def));
+			return result;
+		}
+#endif
 	}
 
 	public sealed class AllBuildingsNonColonistOfDef_Patch : FishPrepatch
@@ -228,8 +321,8 @@ public sealed class Buildings : ClassWithFishPrepatches
 	public readonly record struct Cache()
 	{
 		public readonly FishTable<ThingDef, IndexedFishSet<Building>>
-			ColonistBuildingsByDef = new(),
-			NonColonistBuildingsByDef = new();
+			ColonistBuildingsByDef = [],
+			NonColonistBuildingsByDef = [];
 
 		public readonly IndexedFishSet<Building_ResearchBench> ColonistResearchBenches = [];
 		

@@ -10,7 +10,7 @@ using FisheryLib.Pools;
 using PerformanceFish.Prepatching;
 using RimWorld.IO;
 
-namespace PerformanceFish;
+namespace PerformanceFish.Rendering;
 
 public sealed class TextureLoadingPatches : ClassWithFishPrepatches
 {
@@ -93,6 +93,7 @@ public sealed class TextureLoadingPatches : ClassWithFishPrepatches
 				var data = file.ReadAllBytes();
 				texture2D = new(2, 2, TextureFormat.Alpha8, true);
 				texture2D.LoadImage(data);
+				FixMipMapsIfNeeded(texture2D, data, file);
 			}
 			
 			if (!isDds && Prefs.TextureCompression)
@@ -101,7 +102,10 @@ public sealed class TextureLoadingPatches : ClassWithFishPrepatches
 			texture2D.name = Path.GetFileNameWithoutExtension(file.Name);
 			texture2D.filterMode = FilterMode.Trilinear;
 			texture2D.anisoLevel = 0;
-			texture2D.mipMapBias = -0.7f;
+			
+			if (texture2D.mipmapCount > 1)
+				texture2D.mipMapBias = -0.7f;
+			
 			texture2D.Apply(!hasStoredMipMaps, true);
 			return texture2D;
 		}
@@ -116,7 +120,23 @@ public sealed class TextureLoadingPatches : ClassWithFishPrepatches
 
 			var texture2D = new Texture2D(2, 2, TextureFormat.Alpha8, true);
 			texture2D.LoadImage(data);
+			FixMipMapsIfNeeded(texture2D, data, file);
 			return texture2D;
+		}
+
+		public static void FixMipMapsIfNeeded(Texture2D texture2D, byte[] data, VirtualFile file)
+		{
+			if (((texture2D.width & 3) == 0) & ((texture2D.height & 3) == 0))
+				return;
+
+			if (Prefs.LogVerbose)
+			{
+				Log.Warning($"Texture does not support mipmapping, needs to be divisible by 4 ({
+					texture2D.width}x{texture2D.height}) for '{file.Name}'");
+			}
+
+			texture2D = new(2, 2, TextureFormat.Alpha8, mipChain: false);
+			texture2D.LoadImage(data);
 		}
 
 		private static byte[]? ReadBytesForFallbackFormat(VirtualFile file)

@@ -15,15 +15,20 @@ namespace PerformanceFish;
 public static class PrepatcherFields
 {
 	[PrepatcherField]
+	[ValueInitializer(nameof(CreateObject))]
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static extern object LockObject(this ListerThings listerThings);
+
+	[PrepatcherField]
 	[ValueInitializer(nameof(CreateMapEvents))]
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static extern MapEvents.Instanced Events(this Map map);
-	
+
 	[PrepatcherField]
 	[ValueInitializer(nameof(CreateThingEvents))]
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static extern ThingEvents.Instanced Events(this Thing thing);
-	
+
 	[PrepatcherField]
 	[ValueInitializer(nameof(CreateGeneList))]
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -69,15 +74,23 @@ public static class PrepatcherFields
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static extern ref StorageSettingsPatches.StorageSettingsCache Cache(this StorageSettings storageSettings);
 
+#if V1_4
+	[PrepatcherField]
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static extern ref object? MonitorObject(this GasGrid gasGrid);
+#endif
+
+#if !V1_4
+	[PrepatcherField]
+	[ValueInitializer(nameof(CreateParallelGasJob))]
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static extern GasGridOptimization.ParallelJob ParallelJob(this GasGrid gasGrid);
+#endif
+
 	[PrepatcherField]
 	[ValueInitializer(nameof(CreateParallelGasGridArray))]
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static extern GasGridOptimization.ParallelGasGrid[] ParallelGasGrids(this GasGrid gasGrid);
-
-	[PrepatcherField]
-	[ValueInitializer(nameof(CreateGroupMonitorObject))]
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static extern object GasGridMonitorObject(this Map map);
 
 	[PrepatcherField]
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -103,6 +116,11 @@ public static class PrepatcherFields
 	public static extern ref Listers.Buildings.Cache Cache(this ListerBuildings listerBuildings);
 
 	[PrepatcherField]
+	[ValueInitializer(nameof(CreateListerThingsCache))]
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static extern ref Listers.Things.Cache Cache(this ListerThings listerThings);
+
+	[PrepatcherField]
 	[ValueInitializer(nameof(CreateListerHaulablesCache))]
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static extern ref Listers.Haulables.Cache Cache(this ListerHaulables listerHaulables);
@@ -121,10 +139,6 @@ public static class PrepatcherFields
 	[ValueInitializer(nameof(GetEmptyArray))]
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static extern ref float[] StatsCache(this BuildableDef buildableDef);
-
-	[PrepatcherField]
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	public static extern ref object MonitorObject(this GasGrid gasGrid);
 
 	// [PrepatcherField]
 	// [ValueInitializer(nameof(CreateHediffCompList))]
@@ -149,7 +163,7 @@ public static class PrepatcherFields
 
 	public static List<Hediff> CreateHediffList() => new();
 #endif
-	
+
 	public static List<Gene> CreateGeneList() => [];
 	public static WorldPawnsOptimization.Cache CreateWorldPawnsCache() => new();
 	public static HashSet<Building_Bed> CreateBedHashSet() => [];
@@ -163,9 +177,14 @@ public static class PrepatcherFields
 	public static StorageDistrict[] GetDefaultDistrictArray() => StorageDistrict.GetDefaultArray();
 	public static Cache.CellGrid<StorageDistrict> CreateStorageDistrictGrid(Map map) => new(map);
 	public static Listers.Buildings.Cache CreateListerBuildingsCache() => new();
+	public static Listers.Things.Cache CreateListerThingsCache() => new();
 	public static Listers.Haulables.Cache CreateListerHaulablesCache() => new();
 	public static HaulDestinationManagerCache CreateHaulDestinationManagerCache() => new();
 	public static float[] GetEmptyArray() => Array.Empty<float>();
+	public static object CreateObject() => new();
+#if !V1_4
+	public static GasGridOptimization.ParallelJob CreateParallelGasJob() => new();
+#endif
 
 	public static float[] CreateBaseStatsCache()
 	{
@@ -180,18 +199,36 @@ public static class PrepatcherFields
 	public static GasGridOptimization.ParallelGasGrid[] CreateParallelGasGridArray(GasGrid gasGrid)
 	{
 		DefDatabase<GasDef>.SetIndices();
-		
+
 		var map = gasGrid.map;
 		var gasDefs = DefDatabase<GasDef>.AllDefsListForReading;
 
-		if (gasDefs.Count < 3)
+		if (gasDefs.Count
+#if V1_4
+			< 3
+#else
+			< 4
+#endif
+		)
 		{
-			Log.Error($"GasDefs are missing! Expected are at least 3, DefDatabase contains {
-				gasDefs.Count} instead. ParallelGasGrid won't work correctly in this state.");
+			Log.Error($"GasDefs are missing! Expected are at least "
+#if V1_4
+				+ $"3"
+#else
+				+ $"4"
+#endif
+				+ $", DefDatabase contains {
+					gasDefs.Count} instead. ParallelGasGrid won't work correctly in this state.");
 		}
 		else
 		{
-			if (gasDefs[0] != GasDefOf.BlindSmoke || gasDefs[1] != GasDefOf.ToxGas || gasDefs[2] != GasDefOf.RotStink)
+			if (gasDefs[0] != GasDefOf.BlindSmoke
+				|| gasDefs[1] != GasDefOf.ToxGas
+				|| gasDefs[2] != GasDefOf.RotStink
+#if !V1_4
+				|| gasDefs[3] != GasDefOf.DeadLifeDust
+#endif
+			)
 			{
 				Log.Warning("GasDefs out of order. Sorting now to fix.");
 				var allGasDefs = gasDefs.ToList();
@@ -199,29 +236,52 @@ public static class PrepatcherFields
 				allGasDefs.Remove(gasDefs[0] = GasDefOf.BlindSmoke);
 				allGasDefs.Remove(gasDefs[1] = GasDefOf.ToxGas);
 				allGasDefs.Remove(gasDefs[2] = GasDefOf.RotStink);
+#if !V1_4
+				allGasDefs.Remove(gasDefs[3] = GasDefOf.DeadLifeDust);
+#endif
 
 				for (var i = 0; i < allGasDefs.Count; i++)
-					gasDefs[i + 3] = allGasDefs[i];
-				
+				{
+					gasDefs[i
+#if V1_4
+						+ 3
+#else
+						+ 4
+#endif
+					] = allGasDefs[i];
+				}
+
 				DefDatabase<GasDef>.SetIndices();
 			}
 		}
-		
+
 		var grids = new GasGridOptimization.ParallelGasGrid[gasDefs.Count];
 		for (var i = 0; i < grids.Length; i++)
 			grids[i] = new(map, gasDefs[i]);
 
+#if V1_4
 		if (FishSettings.ThreadingEnabled)
 		{
-			var monitorObject = map.GasGridMonitorObject();
-		
+			var monitorObject = gasGrid.MonitorObject() ??= CreateGroupMonitorObject();
+
 			for (var i = 1; i < grids.Length; i++)
 			{
 				var grid = grids[i];
 				ParallelNoAlloc.RegisterBackgroundWaitingWorker(monitorObject, () => grid.Tick());
 			}
 		}
-
+#else
+		var parallelJob = gasGrid.ParallelJob();
+		if (parallelJob != null!)
+		{
+			parallelJob.GasGrids = grids;
+		}
+		else
+		{
+			Log.Error(
+				"Failed to initialize GasGrid parallel job. Map components may have loaded in an incorrect order.");
+		}
+#endif
 		return grids;
 	}
 

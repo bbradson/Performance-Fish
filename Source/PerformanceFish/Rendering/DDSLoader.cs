@@ -5,7 +5,7 @@
 
 using System.IO;
 
-namespace PerformanceFish;
+namespace PerformanceFish.Rendering;
 
 //DDS importing from // https://github.com/sarbian/DDSLoader/blob/master/DatabaseLoaderTexture_DDS.cs
 public static class DDSLoader

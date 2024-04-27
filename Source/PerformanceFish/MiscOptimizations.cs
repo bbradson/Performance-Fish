@@ -18,15 +18,12 @@ public sealed class MiscPrepatchedOptimizations : ClassWithFishPrepatches
 	{
 		public override string Description { get; }
 			= "Optimization for a basic and frequently used list copying method. Replaces a for loop with an "
-			+ "optimized IL instruction.";/*{(ActiveMods.GradientHair
-					? " Disabled due to incompatibility with Gradient Hair" : "")}";*/
-
-		// public override bool Enabled => base.Enabled && !ActiveMods.GradientHair;
+			+ "optimized IL instruction.";
 
 		public override MethodBase TargetMethodBase { get; } = methodof(GenList.ListFullCopy<object>);
 
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
-			=> ilProcessor.ReplaceBodyWith(ListFullCopy<object>/*Utility.CollectionExtensions.Copy<object>*/);
+			=> ilProcessor.ReplaceBodyWith(ListFullCopy<object>);
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static List<T> ListFullCopy<T>(List<T> source) => source.Copy();
@@ -51,7 +48,7 @@ public sealed class MiscPrepatchedOptimizations : ClassWithFishPrepatches
 	{
 		public override string? Description { get; } = "Tiny optimization by fixing an incorrect cast";
 
-		public override MethodBase TargetMethodBase => methodof((Func<IntVec3, Map, bool>)GenGrid.InBounds);
+		public override MethodBase TargetMethodBase { get; } = methodof((Func<IntVec3, Map, bool>)GenGrid.InBounds);
 
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
@@ -60,7 +57,7 @@ public sealed class MiscPrepatchedOptimizations : ClassWithFishPrepatches
 		public static bool ReplacementBody(IntVec3 c, Map map)
 		{
 			var size = map.Size;
-			return (uint)c.x < (uint)size.x && (uint)c.z < (uint)size.z;
+			return ((uint)c.x < (uint)size.x) & ((uint)c.z < (uint)size.z);
 		}
 	}
 }

@@ -5,6 +5,7 @@
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
+using PerformanceFish.Defs;
 using PerformanceFish.Prepatching;
 using StatsCache = PerformanceFish.Cache.ByInt<uint, ushort, PerformanceFish.StatCaching.CachedStatValue>;
 

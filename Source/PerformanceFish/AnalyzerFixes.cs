@@ -4,6 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Linq;
 using System.Reflection.Emit;
 using System.Xml;
@@ -305,9 +306,28 @@ public static class AnalyzerFixes
 		var methods = Reflection.MethodsOfName(AccessTools.TypeByName(array[0]), array[1]);
 		foreach (var method in methods)
 		{
-			yield return method.IsGenericMethodDefinition
-				? method.MakeGenericMethod(GetTypeArguments(method))
-				: method;
+			if (method.IsGenericMethodDefinition || method.ReturnType.IsByRef)
+				continue;
+			
+			MethodInfo? methodToReturn;
+			try
+			{
+				methodToReturn = method.IsGenericMethodDefinition
+					? method.MakeGenericMethod(GetTypeArguments(method))
+					: method;
+			}
+			catch (Exception e)
+			{
+				methodToReturn = null;
+				Log.Error($"Exception caught while trying to parse generic method '{
+					method.FullDescription()}'{
+						(XmlParser.CurrentModDir is { } currentModDir
+							? $" in 'DubsAnalyzer.xml' within {currentModDir}"
+							: "")}:\n{e}");
+			}
+			
+			if (methodToReturn != null)
+				yield return methodToReturn;
 		}
 	}
 
@@ -317,9 +337,10 @@ public static class AnalyzerFixes
 		var resultArray = new Type[genericArguments.Length];
 		for (var i = 0; i < genericArguments.Length; i++)
 		{
-			resultArray[i] = genericArguments[i].GetGenericArguments() is var constraints && constraints.Length != 0
-				? constraints[0]
-				: typeof(object);
+			var genericArgument = genericArguments[i];
+			resultArray[i] = genericArgument.GetGenericArguments() is var constraints && constraints.Length != 0
+				? genericArgument.MakeGenericType(constraints)
+				: genericArgument;
 		}
 
 		return resultArray;
@@ -430,6 +451,8 @@ public static class AnalyzerFixes
 	//Copied from Wiri's analyzer fork, with above fixes integrated. The steam version lacks this functionality
 	public static class XmlParser
 	{
+		public static DirectoryInfo? CurrentModDir;
+		
 		[SuppressMessage("Security", "CA3075")]
 		public static void CollectXmlData()
 		{
@@ -439,6 +462,8 @@ public static class AnalyzerFixes
 				if (xmlFiles.Length == 0)
 					continue;
 
+				CurrentModDir = dir;
+
 				foreach (var file in xmlFiles)
 				{
 					var doc = new XmlDocument();
@@ -446,6 +471,8 @@ public static class AnalyzerFixes
 
 					Parse(doc);
 				}
+
+				CurrentModDir = null;
 			}
 		}
 
@@ -516,7 +543,17 @@ public static class AnalyzerFixes
 					continue;
 
 				if (childNode.NodeType != XmlNodeType.Comment)
-					methods.AddRange(func(childNode.InnerText));
+				{
+					try
+					{
+						methods.AddRange(func(childNode.InnerText));
+					}
+					catch (Exception e)
+					{
+						Log.Error($"Exception caught while trying to parse DubsAnalyzer.xml at '{
+							childNode.InnerText}' in '{CurrentModDir}':\n{e}");
+					}
+				}
 			}
 		}
 

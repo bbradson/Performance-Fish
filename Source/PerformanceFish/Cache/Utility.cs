@@ -8,6 +8,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Reflection.Emit;
+using FisheryLib.FunctionPointers;
 using JetBrains.Annotations;
 using PerformanceFish.Events;
 
@@ -218,6 +219,20 @@ public static class Utility
 		return newCollection;
 	}
 
+	[MethodImpl(MethodImplOptions.NoInlining | MethodImplOptions.NoOptimization)]
+	public static FishTable<TKey, TValue> AddNew<TKey, TValue>(List<IDictionary> cacheList,
+		Func<TKey, TValue>? valueInitializer = null,
+		Action<KeyValuePair<TKey, TValue>>? onEntryAdded = null,
+		Action<KeyValuePair<TKey, TValue>>? onEntryRemoved = null)
+	{
+		var newCache = AddNew(valueInitializer, onEntryAdded, onEntryRemoved);
+		
+		lock (cacheList)
+			cacheList.Add(newCache);
+		
+		return newCache;
+	}
+
 	private sealed record OnDestroyActionData<TKey, TValue>(TKey Key, FishTable<TKey, TValue> Collection)
 	{
 		public Action<Thing>? Action;
@@ -276,6 +291,69 @@ public static class Utility
 		All.Add(newCollection);													// require different constructors.
 		return newCollection;													// Reflection.New<T> can't use arguments
 	}																			// for resolving method calls (yet)
+
+	public static class Internal
+	{
+		public static void RemoveIn<T>(List<IDictionary> caches, T key)
+		{
+			lock (caches)
+			{
+				for (var i = caches.Count; i-- > 0;)
+					caches[i].Remove(key!);
+			}
+		}
+		
+		public static void ClearIn(List<IDictionary> caches)
+		{
+			lock (caches)
+			{
+				for (var i = caches.Count; i-- > 0;)
+					caches[i].Clear();
+			}
+		}
+
+		public static unsafe void Initialize<T>()
+		{
+			try
+			{
+				_ = Equals<T>.Default;
+				_ = EqualsByRef<T>.Default;
+				_ = GetHashCode<T>.Default;
+				_ = GetHashCodeByRef<T>.Default;
+				_ = FisheryLib.Collections.Internal.KeyUtility<T>.Default;
+			}
+			catch (Exception ex)
+			{
+				string name;
+
+				try
+				{
+					name = typeof(T).FullDescription();
+				}
+				catch
+				{
+					try
+					{
+						name = typeof(T).FullName ?? typeof(T).Name;
+					}
+					catch
+					{
+						try
+						{
+							name = typeof(T).Name;
+						}
+						catch (Exception inner)
+						{
+							name = inner.ToString();
+						}
+					}
+				}
+				
+				Log.Error($"Performance Fish encountered an exception while trying to initialize '{
+					name}'\n==================================================\n{ex}");
+			}
+		}
+	}
 }
 
 public delegate int IndexGetter<in T>(T item);

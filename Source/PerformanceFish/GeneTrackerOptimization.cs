@@ -49,9 +49,6 @@ public sealed class GeneTrackerOptimization : ClassWithFishPrepatches
 			}
 		}
 
-		// [MethodImpl(MethodImplOptions.AggressiveInlining)]
-		// public static bool Dirty(List<Gene> genes, List<Gene> genesToTick) => genes._version != genesToTick._version;
-
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool Dirty(Pawn_GeneTracker instance, List<Gene> genesToTick)
 			=> GetListVersion(instance) != genesToTick._version;
@@ -69,7 +66,6 @@ public sealed class GeneTrackerOptimization : ClassWithFishPrepatches
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		private static int GetListVersion(Pawn_GeneTracker instance)
-			// => HashCode.Combine(instance.xenogenes._version, instance.endogenes._version);
 			=> (instance.xenogenes._version << 16) | (instance.endogenes._version & 0b1111_1111_1111_1111);
 
 		private static void AddTickableGenes(List<Gene> genesToTick, List<Gene> genes)
@@ -87,27 +83,6 @@ public sealed class GeneTrackerOptimization : ClassWithFishPrepatches
 				genesToTick.Add(gene);
 			}
 		}
-
-		// [MethodImpl(MethodImplOptions.NoInlining)]
-		// public static void Update(List<Gene> genes, List<Gene> genesToTick)
-		// {
-		// 	genesToTick.Clear();
-		// 	
-		// 	var count = genes.Count;
-		// 	for (var i = 0; i < count; i++)
-		// 	{
-		// 		var gene = genes[i];
-		// 		if (SkippableTypes.Contains(gene.GetType())
-		// 			&& (gene.def.mentalBreakMtbDays <= 0f || gene.def.mentalBreakDef == null))
-		// 		{
-		// 			continue;
-		// 		}
-		// 		
-		// 		genesToTick.Add(gene);
-		// 	}
-		// 	
-		// 	genesToTick._version = genes._version;
-		// }
 		
 		public static HashSet<Type> SkippableTypes
 			= typeof(Gene).SubclassesWithNoMethodOverrideAndSelf(nameof(Gene.Tick)).ToHashSet();

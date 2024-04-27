@@ -15,7 +15,12 @@ public static class GasDefOf
 	public static GasDef
 		BlindSmoke,
 		ToxGas,
-		RotStink;
+		RotStink
+#if !V1_4
+		,
+		DeadLifeDust
+#endif
+		;
 
 	static GasDefOf() => DefOfHelper.EnsureInitializedInCtor(typeof(GasDefOf));
 }

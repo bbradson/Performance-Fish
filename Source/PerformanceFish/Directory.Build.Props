@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+	<PropertyGroup>
+		<RootNamespace>PerformanceFish</RootNamespace>
+		<AssemblyName>PerformanceFish</AssemblyName>
+		<Authors>bradson</Authors>
+		<Version>0.6.0.0</Version>
+		<PackageLicenseFile>LICENSE</PackageLicenseFile>
+		<TargetFramework>net48</TargetFramework>
+		<LangVersion>preview</LangVersion>
+		<PlatformTarget>AnyCPU</PlatformTarget>
+		<Optimize>true</Optimize>
+		<DebugSymbols>true</DebugSymbols>
+		<Nullable>enable</Nullable>
+		<EnableNETAnalyzers>True</EnableNETAnalyzers>
+		<AnalysisLevel>preview-recommended</AnalysisLevel>
+		<ErrorReport>prompt</ErrorReport>
+		<WarningLevel>5</WarningLevel>
+		<DebugType>portable</DebugType>
+		<NoWarn>
+			CA1000;CA1010;CA1051;CA1304;CA1305;CA1310;CA1311;CA1707;CA1708;CA1710;CA1711;CA1715;CA1716;CA1720;CA1725;
+			CA1852;CA2201;CS8500;CS9082
+		</NoWarn>
+		<BaseIntermediateOutputPath>obj\$(MSBuildProjectName)\$(Configuration)\</BaseIntermediateOutputPath>
+		<MSBuildProjectExtensionsPath>obj\$(MSBuildProjectName)\$(Configuration)\</MSBuildProjectExtensionsPath>
+		<DefaultItemExcludes>$(DefaultItemExcludes);obj/**/*.*</DefaultItemExcludes>
+		<PublicizerClearCacheOnClean>true</PublicizerClearCacheOnClean>
+	</PropertyGroup>
+	<ItemGroup>
+		<PackageReference Include="Zetrith.Prepatcher" Version="1.*" ExcludeAssets="runtime" />
+		<PackageReference Include="PolySharp" Version="1.*" />
+		<PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.*" ExcludeAssets="runtime" />
+		<PackageReference Include="JetBrains.Annotations" Version="2023.*" Aliases="nuget" ExcludeAssets="runtime" />
+		<PackageReference Include="Krafs.Publicizer" Version="2.*" />
+		
+		<Publicize Include="Assembly-CSharp;0Harmony" IncludeVirtualMembers="false" />
+		<Publicize Include="Assembly-CSharp:RimWorld.JobGiver_Haul.TryGiveJob" />
+		<!-- DoNotPublicize Include="0Harmony:Mono.Collections.Generic.Collection`1" / -->
+		<DoNotPublicize Include="0Harmony:System.Memory`1" />
+		<DoNotPublicize Include="0Harmony:System.ReadOnlyMemory`1" />
+		<DoNotPublicize Include="0Harmony:System.Span`1" />
+		<DoNotPublicize Include="0Harmony:System.ReadOnlySpan`1" />
+		<DoNotPublicize Include="0Harmony:System.ThrowHelper" />
+		<DoNotPublicize Include="0Harmony:System.HashCode" />
+		<DoNotPublicize Include="0Harmony:System.StringExtensions" />
+		<DoNotPublicize Include="0Harmony:System.MemoryExtensions" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.CallerArgumentExpressionAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.DefaultInterpolatedStringHandler" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.IgnoresAccessChecksToAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.InterpolatedStringHandlerAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.InterpolatedStringHandlerArgumentAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.IsByRefLikeAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.IsExternalInit" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.IsReadOnlyAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.NativeIntegerAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.NullableAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.NullableContextAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.NullablePublicOnlyAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.RefSafetyRulesAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.ModuleInitializerAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.ITuple" />
+		<DoNotPublicize Include="0Harmony:System.Runtime.CompilerServices.Unsafe" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.AllowNullAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.DisallowNullAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.DoesNotReturnAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.DoesNotReturnIfAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembersAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.ExtraDynamicallyAccessedMemberTypes" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.MaybeNullAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.MemberNotNullAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.MemberNotNullWhenAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.NotNullAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.NotNullWhenAttribute" />
+		<DoNotPublicize Include="0Harmony:System.Diagnostics.CodeAnalysis.UnscopedRefAttribute" />
+		<Publicize Include="mscorlib:System.Collections.Generic.Dictionary`2.buckets" />
+		<Publicize Include="mscorlib:System.Collections.Generic.Dictionary`2.entries" />
+		<Publicize Include="mscorlib:System.Collections.Generic.Dictionary`2.version" />
+		<Publicize Include="mscorlib:System.Collections.Generic.Dictionary`2+Entry" />
+		<Publicize Include="mscorlib:System.Collections.Generic.List`1._items" />
+		<Publicize Include="mscorlib:System.Collections.Generic.List`1._version" />
+		<Publicize Include="mscorlib:System.Collections.Generic.List`1._size" />
+		<Publicize Include="mscorlib:System.Collections.Generic.List`1.EnsureCapacity" />
+		<Publicize Include="System.Core:System.Collections.Generic.HashSet`1._version" />
+		<Publicize Include="mscorlib:System.MonoCustomAttrs.GetCustomAttributes" />
+		<Publicize Include="mscorlib:System.RuntimeType" />
+		<Publicize Include="mscorlib:System.Reflection.MonoField" />
+		<Publicize Include="mscorlib:System.String.m_firstChar" />
+		<None Include="..\..\LICENSE">
+			<Pack>True</Pack>
+			<PackagePath />
+		</None>
+	</ItemGroup>
+</Project>

@@ -48,19 +48,22 @@ public sealed class PerformanceFishMod : Mod
 		PACKAGE_ID = PackageIDs.PERFORMANCE_FISH;
 	
 	[Obsolete("I am not incrementing this version number")]
-	public const decimal VERSION = 0.5M;
+	public const decimal VERSION = 0.6M;
 
 	public static Version LoadedVersion => typeof(PerformanceFishMod).Assembly.GetLoadedVersion();
 
 	public static FishSettings? Settings { get; internal set; }
 	public static PerformanceFishMod? Mod { get; private set; }
-	public static Harmony Harmony { get; private set; } = new(PACKAGE_ID);
+
+	public static Harmony Harmony => _harmony.Value;
+
 	public static IHasFishPatch[]? AllPatchClasses { get; internal set; }
 	public static ClassWithFishPrepatches[]? AllPrepatchClasses { get; internal set; }
 
 	private static FishPatch[]? _allFishPatches;
 
 	private static FishPrepatchBase[]? _allFishPrepatches;
+	private static readonly Lazy<Harmony> _harmony = new(static () => new(PACKAGE_ID), true);
 
 	public static IEnumerable<FishPatch> AllHarmonyPatches
 		=> _allFishPatches ??= AllPatchClasses?.SelectMany(static patchClass => patchClass.Patches.All.Values).ToArray()

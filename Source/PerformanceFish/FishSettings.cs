@@ -94,6 +94,9 @@ public sealed class FishSettings : ModSettings
 		}
 
 		ls.Gap();
+		ls.Label("Changes to prepatches require a restart. Harmony patches update immediately when toggled.");
+
+		ls.Gap();
 		var curFontStyle = Text.CurFontStyle;
 		var curFontSize = curFontStyle.fontSize;
 		curFontStyle.fontSize = 20;

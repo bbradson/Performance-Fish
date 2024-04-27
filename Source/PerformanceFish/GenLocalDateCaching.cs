@@ -16,7 +16,7 @@ public sealed class GenLocalDateCaching : ClassWithFishPatches
 	{
 		public override string Description { get; }
 			= "Caches results of GenLocalDate.DayTick for the first map. This is similar to Rim73's mind state "
-				+ "optimization, but yields accurate results instead of a placeholder value to avoid issues.";
+			+ "optimization, but yields accurate results instead of a placeholder value to avoid issues";
 
 		public override Delegate TargetMethodGroup { get; } = (Func<Thing, int>)GenLocalDate.DayTick;
 		public override int TranspilerMethodPriority => Priority.First;
@@ -64,7 +64,7 @@ public sealed class GenLocalDateCaching : ClassWithFishPatches
 	{
 		public override string Description { get; }
 			= "Caches results of GenLocalDate.DayTick for the first map. This is similar to Rim73's mind state "
-				+ "optimization, but yields accurate results instead of a placeholder value to avoid issues.";
+			+ "optimization, but yields accurate results instead of a placeholder value to avoid issues";
 
 		public override Delegate TargetMethodGroup { get; } = (Func<Map, int>)GenLocalDate.DayTick;
 

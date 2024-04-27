@@ -184,6 +184,14 @@
 		</DerivedMethods>
 	</RitualObligationTriggers>
 
+	<StatParts>
+		<Tooltip>TransformValue methods of StatParts. These run on every stat lookup, when not cached</Tooltip>
+		<Category>Tick</Category>
+		<DerivedMethods>
+			<li>RimWorld.StatPart:TransformValue</li>
+		</DerivedMethods>
+	</StatParts>
+
 	<ThingCompTick>
 		<Tooltip>Tick methods of comps attached to Things. Any ThingWithComps can have these, and any mod can add new ones</Tooltip>
 		<Category>Tick</Category>

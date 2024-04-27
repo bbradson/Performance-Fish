@@ -17,7 +17,7 @@ public sealed class GenTypesPatches : ClassWithFishPrepatches
 		public override string? Description { get; }
 			= "Fix for thread safety. The vanilla method was rarely breaking and preventing the game from loading";
 
-		public static object Lock = new();
+		public static readonly object Lock = new();
 		
 		public override MethodBase TargetMethodBase { get; }
 			= AccessTools.PropertyGetter(typeof(GenTypes), nameof(GenTypes.AllTypes));
@@ -34,7 +34,7 @@ public sealed class GenTypesPatches : ClassWithFishPrepatches
 		public override string? Description { get; }
 			= "Fix for thread safety. The vanilla method was rarely breaking and preventing the game from loading";
 
-		public static object Lock = new();
+		public static readonly object Lock = new();
 
 		public override MethodBase TargetMethodBase { get; } = methodof(GenTypes.AllTypesWithAttribute<Attribute>);
 
@@ -67,7 +67,7 @@ public sealed class GenTypesPatches : ClassWithFishPrepatches
 		public override string? Description { get; }
 			= "Fix for thread safety. The vanilla method was rarely breaking and preventing the game from loading";
 
-		public static object Lock = new();
+		public static readonly object Lock = new();
 
 		public override MethodBase TargetMethodBase { get; } = methodof(GenTypes.AllSubclasses);
 
@@ -107,7 +107,7 @@ public sealed class GenTypesPatches : ClassWithFishPrepatches
 			= "Fix for thread safety, paired with a small optimization for faster loading. The vanilla method was "
 			+ "rarely breaking and preventing the game from loading";
 
-		public static object Lock = new();
+		public static readonly object Lock = new();
 
 		public override MethodBase TargetMethodBase { get; } = methodof(GenTypes.AllSubclassesNonAbstract);
 

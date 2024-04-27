@@ -35,4 +35,17 @@ public static class CellIndexExtensions
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static int CellToIndex(int x, int z, int mapSizeX) => (z * mapSizeX) + x;
+	
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static List<Thing> ThingsListAtFast(this ThingGrid thingGrid, CellIndex cellIndex)
+		=> thingGrid.thingGrid[cellIndex.Value];
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static bool IsFogged(this FogGrid fogGrid, CellIndex cellIndex) => fogGrid.fogGrid[cellIndex.Value];
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static float GetDepth(this SnowGrid snowGrid, CellIndex cellIndex) => snowGrid.depthGrid[cellIndex.Value];
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static float GetDepth(this SnowGrid snowGrid, int cellIndex) => snowGrid.depthGrid[cellIndex];
 }

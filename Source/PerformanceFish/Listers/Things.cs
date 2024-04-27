@@ -3,6 +3,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+using System.Diagnostics;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using PerformanceFish.Prepatching;
@@ -26,20 +27,29 @@ public sealed class ThingsPrepatches : ClassWithFishPrepatches
 		{
 			if (!ListerThings.EverListable(t.def, __instance.use))
 				return;
-			
-			AddToDefList(__instance, t);
 
-			var allGroups = ThingListGroupHelper.AllGroups;
-			foreach (var thingRequestGroup in allGroups)
+			lock (__instance.LockObject())
 			{
-				if ((__instance.use == ListerThingsUse.Region && !thingRequestGroup.StoreInRegion())
-					|| !thingRequestGroup.Includes(t.def))
-				{
-					continue;
-				}
+				AddToDefList(__instance, t);
 
-				AddToGroupList(__instance, t, thingRequestGroup);
+				var allGroups = ThingListGroupHelper.AllGroups;
+				foreach (var thingRequestGroup in allGroups)
+				{
+					if ((__instance.use == ListerThingsUse.Region && !thingRequestGroup.StoreInRegion())
+						|| !thingRequestGroup.Includes(t.def))
+					{
+						continue;
+					}
+
+					AddToGroupList(__instance, t, thingRequestGroup);
+				}
+				
+				AddToTypeList(__instance, t);
 			}
+
+#if !V1_4
+			__instance.thingListChangedCallbacks?.onThingAdded?.Invoke(t);
+#endif
 		}
 	}
 
@@ -61,57 +71,86 @@ public sealed class ThingsPrepatches : ClassWithFishPrepatches
 			if (!ListerThings.EverListable(t.def, __instance.use))
 				return;
 
-			RemoveFromDefList(__instance, t);
-
-			var allGroups = ThingListGroupHelper.AllGroups;
-			for (var i = 0; i < allGroups.Length; i++)
+			lock (__instance.LockObject())
 			{
-				var thingRequestGroup = allGroups[i];
-				if ((__instance.use == ListerThingsUse.Region && !thingRequestGroup.StoreInRegion())
-					|| !thingRequestGroup.Includes(t.def))
+				RemoveFromDefList(__instance, t);
+
+				var allGroups = ThingListGroupHelper.AllGroups;
+				for (var i = 0; i < allGroups.Length; i++)
 				{
-					continue;
+					var thingRequestGroup = allGroups[i];
+					if ((__instance.use == ListerThingsUse.Region && !thingRequestGroup.StoreInRegion())
+						|| !thingRequestGroup.Includes(t.def))
+					{
+						continue;
+					}
+				
+					RemoveFromGroupList(__instance, t, thingRequestGroup);
 				}
 				
-				RemoveFromGroupList(__instance, t, thingRequestGroup);
+				RemoveFromTypeList(__instance, t);
 			}
+			
+#if !V1_4
+			__instance.thingListChangedCallbacks?.onThingRemoved?.Invoke(t);
+#endif
 		}
 	}
 
 	public static void AddToDefList(ListerThings lister, Thing thing)
 	{
 		if (!lister.listsByDef.TryGetValue(thing.def, out var value))
-		{
-			value = [];
-			lister.listsByDef.Add(thing.def, value);
-		}
+			lister.listsByDef.Add(thing.def, value = []);
 
 		value.Add(thing);
-		lister.IndexMapByDef()[thing.GetKey()] = lister.listsByDef[thing.def].Count - 1;
+		lister.IndexMapByDef()[thing.GetKey()] = value.Count - 1;
 	}
 
 	public static void AddToGroupList(ListerThings lister, Thing thing, ThingRequestGroup thingRequestGroup)
 	{
-		var list = lister.listsByGroup[(uint)thingRequestGroup];
+		ref var list = ref lister.listsByGroup[(uint)thingRequestGroup];
+		ref var hash = ref lister.stateHashByGroup[(uint)thingRequestGroup];
+		
 		if (list == null)
 		{
 			list = [];
-			lister.listsByGroup[(uint)thingRequestGroup] = list;
-			lister.stateHashByGroup[(uint)thingRequestGroup] = 0;
+			hash = 0;
 		}
 
 		list.Add(thing);
-		lister.stateHashByGroup[(uint)thingRequestGroup]++;
+		hash++;
 
-		lister.IndexMapByGroup()[new(thingRequestGroup, thing.GetKey())]
-			= lister.listsByGroup[(uint)thingRequestGroup].Count - 1;
+		lister.IndexMapByGroup()[new(thingRequestGroup, thing.GetKey())] = list.Count - 1;
+	}
+
+	public static void AddToTypeList(ListerThings lister, Thing thing)
+	{
+		var thingType = thing.GetType();
+		if (thingType == typeof(Thing))
+			return;
+
+		var cache = lister.Cache();
+
+		do
+		{
+			if (thingType == null)
+				break;
+
+			cache.ThingsByType.GetOrAdd(thingType).Add(thing);
+		}
+		while ((thingType = thingType.BaseType) != typeof(Thing));
 	}
 
 	public static void RemoveFromDefList(ListerThings lister, Thing thing)
 	{
 		var thingKey = thing.GetKey();
 		var indexMapByDef = lister.IndexMapByDef();
-		var listByDef = lister.listsByDef[thing.def];
+		
+		if (lister.listsByDef.TryGetValue(thing.def) is not { } listByDef)
+		{
+			LogFailureToRemoveThingFromLister(lister, thing);
+			return;
+		}
 
 		var indexByDef = indexMapByDef.TryGetValue(thingKey, out var knownIndexByDef)
 			&& knownIndexByDef < listByDef.Count
@@ -127,10 +166,19 @@ public sealed class ThingsPrepatches : ClassWithFishPrepatches
 			indexMapByDef[listByDef[indexByDef].GetKey()] = indexByDef;
 	}
 
+	[MethodImpl(MethodImplOptions.NoInlining)]
+	private static void LogFailureToRemoveThingFromLister(ListerThings lister, Thing thing)
+		=> Log.Error($"Tried and failed removing Thing '{thing}' of map '{
+			thing.TryGetMap().ToStringSafe()}' from ListerThings of map '{
+				lister.AllThings?.FirstOrDefault()?.TryGetMap().ToStringSafe()}'.\n{
+					new StackTrace(2, true)}");
+
 	public static void RemoveFromGroupList(ListerThings lister, Thing thing, ThingRequestGroup thingRequestGroup)
 	{
 		var indexMapByGroup = lister.IndexMapByGroup();
-		var listByGroup = lister.listsByGroup[(int)thingRequestGroup];
+		
+		if (lister.listsByGroup[(int)thingRequestGroup] is not { } listByGroup)
+			return;
 
 		var groupMapKey = new GroupThingPair(thingRequestGroup, thing.GetKey());
 
@@ -151,6 +199,24 @@ public sealed class ThingsPrepatches : ClassWithFishPrepatches
 		lister.stateHashByGroup[(uint)thingRequestGroup]++;
 	}
 
+	public static void RemoveFromTypeList(ListerThings lister, Thing thing)
+	{
+		var thingType = thing.GetType();
+		if (thingType == typeof(Thing))
+			return;
+
+		var cache = lister.Cache();
+
+		do
+		{
+			if (thingType == null)
+				break;
+
+			cache.ThingsByType.GetOrAdd(thingType).Remove(thing);
+		}
+		while ((thingType = thingType.BaseType) != typeof(Thing));
+	}
+
 	public sealed class ContainsPatch : FishPrepatch
 	{
 		public override string? Description { get; }
@@ -163,24 +229,99 @@ public sealed class ThingsPrepatches : ClassWithFishPrepatches
 			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
 
 		public static bool ReplacementBody(ListerThings __instance, Thing t)
-			=> __instance.IndexMapByDef().ContainsKey(t.GetKey())
-				|| (__instance.listsByDef.TryGetValue(t.def)?.Contains(t) ?? false);
+		{
+			lock (__instance.LockObject())
+			{
+				return __instance.IndexMapByDef().ContainsKey(t.GetKey())
+					|| (__instance.listsByDef.TryGetValue(t.def)?.Contains(t) ?? false);
+			}
+		}
 	}
 
 	public sealed class ClearPatch : FishPrepatch
 	{
+		public override List<Type> LinkedPatches { get; }
+			= [typeof(AddPatch), typeof(RemovePatch), typeof(ContainsPatch)];
+
 		public override string? Description { get; }
 			= "Required to keep the ListerThings cache synced";
 
 		public override MethodBase TargetMethodBase { get; }
 			= AccessTools.DeclaredMethod(typeof(ListerThings), nameof(ListerThings.Clear));
 
-		public static void Postfix(ListerThings __instance)
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+		public static void ReplacementBody(ListerThings __instance)
 		{
-			__instance.IndexMapByDef().Clear();
-			__instance.IndexMapByGroup().Clear();
+			lock (__instance.LockObject())
+			{
+				__instance.listsByDef.Clear();
+
+				var listsByGroup = __instance.listsByGroup;
+				
+				for (var i = 0; i < listsByGroup.Length; i++)
+				{
+					listsByGroup[i]?.Clear();
+					__instance.stateHashByGroup[i] = 0;
+				}
+				
+				__instance.IndexMapByDef().Clear();
+				__instance.IndexMapByGroup().Clear();
+				ClearTypeLists(__instance);
+			}
+			
+			// no thing __instance.thingListChangedCallbacks?.onThingRemoved?.Invoke(t); calls in original
+		}
+
+		public static void ClearTypeLists(ListerThings lister)
+		{
+			var lists = lister.Cache().ThingsByType;
+			foreach (var (_, list) in lists)
+				list.Clear();
 		}
 	}
+	
+#if !V1_4
+	public sealed class GetThingsOfTypePatch : FishPrepatch
+	{
+		public override string Description { get; }
+			= "Optimizes thing lookups for generic types on ListerThings to directly return the result of cached "
+			+ "data instead of iterating over all things on the map trying to find all matches";
+		
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerThings), nameof(ListerThings.GetThingsOfType), Type.EmptyTypes);
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody<Thing>);
+
+		public static IEnumerable<T> ReplacementBody<T>(ListerThings __instance) where T : Thing
+			=> typeof(T) != typeof(Thing) // normally logs an error instead of simply returning all things
+				? (IEnumerable<T>)__instance.Cache().ThingsByType.GetOrAdd(typeof(T))
+				: (IEnumerable<T>)__instance.AllThings;
+	}
+	
+	public sealed class GetThingsOfTypeIntoListPatch : FishPrepatch
+	{
+		public override string Description { get; }
+			= "Optimizes thing lookups for generic types on ListerThings to directly return the result of cached "
+			+ "data instead of iterating over all things on the map trying to find all matches";
+
+		public override MethodBase TargetMethodBase { get; }
+			= typeof(ListerThings).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+				.First(static method => method.Name == nameof(ListerThings.GetThingsOfType)
+					&& method.ReturnType == typeof(void)
+					&& method.GetParameters().Length == 1);
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(ReplacementBody<Thing>);
+
+		public static void ReplacementBody<T>(ListerThings __instance, List<T> list) where T : Thing
+			=> list.AddRange(typeof(T) != typeof(Thing) // normally logs an error instead of simply returning all things
+				? (IEnumerable<T>)__instance.Cache().ThingsByType.GetOrAdd(typeof(T))
+				: (IEnumerable<T>)__instance.AllThings);
+	}
+#endif
 }
 
 public sealed class Things : ClassWithFishPatches
@@ -193,8 +334,8 @@ public sealed class Things : ClassWithFishPatches
 			= "Part of the ThingFilter.BestThingRequest optimization. Required by that particular patch and gets "
 			+ "toggled alongside it";
 
-		public override Expression<Action> TargetMethod { get; }
-			= static () => new ListerThings(default).ThingsMatching(default);
+		public override MethodBase? TargetMethodInfo { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerThings), nameof(ListerThings.ThingsMatching));
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool Prefix(ListerThings __instance, ThingRequest req, ref List<Thing> __result)
@@ -223,11 +364,12 @@ public sealed class Things : ClassWithFishPatches
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private static List<Thing> GetThingsOfDefsListFor(IEnumerable<ThingDef> thingDefs)
-		=> (_thingsOfDefsDictionary ??= Cache.Utility.AddNew<Dictionary<IEnumerable<ThingDef>, List<Thing>>>())
+		=> (_thingsOfDefsDictionary
+				??= PerformanceFish.Cache.Utility.AddNew<FishTable<IEnumerable<ThingDef>, List<Thing>>>())
 			.GetOrAdd(thingDefs);
 
 	[ThreadStatic]
-	private static Dictionary<IEnumerable<ThingDef>, List<Thing>>? _thingsOfDefsDictionary;
+	private static FishTable<IEnumerable<ThingDef>, List<Thing>>? _thingsOfDefsDictionary;
 
 #if disabled
 	public sealed class ThingRequest_IsUndefined_Patch : FishPatch
@@ -412,4 +554,13 @@ public sealed class Things : ClassWithFishPatches
 		private static Dictionary<ThingDef, FishCache> _dictOfDefs { get; } = new();
 	}
 #endif
+	
+	public readonly record struct Cache()
+	{
+		public readonly FishTable<Type, IList> ThingsByType = new()
+		{
+			ValueInitializer = static type
+				=> (IList)Activator.CreateInstance(typeof(IndexedFishSet<>).MakeGenericType(type))
+		};
+	}
 }

@@ -8,8 +8,15 @@
 // #define GAS_DEBUG_L3 // individual cell changes
 
 using System.Diagnostics;
+#if V1_4
 using System.Diagnostics.CodeAnalysis;
+#endif
 using System.Linq;
+#if !V1_4
+using Gilzoide.ManagedJobs;
+using LudeonTK;
+using Unity.Jobs;
+#endif
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using MonoMod.Utils;
@@ -32,16 +39,28 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
 
-		public static void ReplacementBody(GasGrid __instance, int index, byte smoke, byte toxic, byte rotStink)
+		public static void ReplacementBody(GasGrid __instance, int index, byte smoke, byte toxic, byte rotStink
+#if !V1_4
+			, byte deadlife
+#endif
+		)
 		{
 			if (!ModsConfig.BiotechActive)
 				toxic = 0;
+
+#if !V1_4
+			if (!ModsConfig.AnomalyActive)
+				deadlife = 0;
+#endif
 
 			var gasGrids = __instance.ParallelGasGrids();
 
 			gasGrids[0].SetDirect(index, smoke);
 			gasGrids[1].SetDirect(index, toxic);
 			gasGrids[2].SetDirect(index, rotStink);
+#if !V1_4
+			gasGrids[3].SetDirect(index, deadlife);
+#endif
 		}
 	}
 
@@ -49,7 +68,11 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 	{
 		public override List<Type> LinkedPatches { get; } =
 		[
-			typeof(SetDirectPatch), typeof(ColorAtPatch), typeof(AddGasPatch), typeof(AnyGasAtPatch),
+			typeof(SetDirectPatch),
+#if V1_4
+			typeof(ColorAtPatch),
+#endif
+			typeof(AddGasPatch), typeof(AnyGasAtPatch),
 			typeof(DensityAtPatch), typeof(Debug_ClearAllPatch), typeof(Debug_FillAllPatch),
 			typeof(Notify_ThingSpawnedPatch), typeof(ExposeDataPatch), typeof(MouseOverReadOutOnGUI),
 			typeof(DebugToolsGeneralPushGas)
@@ -76,31 +99,47 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			if (gasGrids.Length < 1)
 				return;
 
+#if !V1_4
+			JobHandle handle;
+#endif
 			if (FishSettings.ThreadingEnabled
+#if V1_4
 				&& TryGetRegisteredGasGridWorkers(__instance, out var monitorObject))
 			{
 				TryPulseRegisteredGasGridWorkers(gasGrids, monitorObject);
+#else
+			)
+			{
+				handle = new ManagedJobParallelFor(__instance.ParallelJob()).Schedule(gasGrids.Length - 1, 1);
+#endif
 			}
 			else
 			{
+#if !V1_4
+				Unsafe.SkipInit(out handle);
+#endif
 				for (var i = 1; i < gasGrids.Length; i++)
 					gasGrids[i].Tick();
 			}
-
+			
 			var firstGasGrid = gasGrids[0];
 			firstGasGrid.Tick();
 			
-			__instance.cycleIndexDiffusion = firstGasGrid.CycleIndexDiffusion;
-			__instance.cycleIndexDissipation = firstGasGrid.CycleIndexDissipation;
-
 			if (FishSettings.ThreadingEnabled)
+			{
+#if V1_4
 				WaitForGasGridWorkers(gasGrids);
+#else
+				handle.Complete();
+#endif
+			}
 		}
 
+#if V1_4
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static bool TryGetRegisteredGasGridWorkers(GasGrid __instance,
 			[NotNullWhen(true)] out object? monitorObject)
-			=> (monitorObject = __instance.map.GasGridMonitorObject()) != null
+			=> (monitorObject = __instance.MonitorObject()) != null
 				&& ParallelNoAlloc.HasAnyRegisteredWorkers(monitorObject);
 
 		[MethodImpl(MethodImplOptions.NoInlining)]
@@ -124,18 +163,33 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 					i++;
 			}
 		}
+#endif
 	}
+
+#if !V1_4
+	public class ParallelJob : IJobParallelFor
+	{
+		public ParallelGasGrid[] GasGrids = null!;
+			
+		public void Execute(int index) => GasGrids[index + 1].Tick();
+	}
+#endif
 
 	public sealed class ColorAtPatch : FishPrepatch
 	{
 		public override bool ShowSettings => false;
 
 		public override MethodBase TargetMethodBase { get; }
+#if V1_4
 			= AccessTools.DeclaredMethod(typeof(GasGrid), nameof(GasGrid.ColorAt));
+#else
+			= AccessTools.DeclaredMethod(typeof(SectionLayer_Gas), nameof(SectionLayer_Gas.ColorAt));
+#endif
 		
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
 
+#if V1_4
 		public static Color ReplacementBody(GasGrid __instance, IntVec3 cell)
 		{
 			var cellIndex = cell.CellToIndex(__instance.map);
@@ -159,6 +213,41 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			
 			return resultColor;
 		}
+#else
+		public static Color ReplacementBody(SectionLayer_Gas __instance, IntVec3 cell)
+		{
+			if (__instance.GetType() != typeof(SectionLayer_Gas))
+				return __instance.DensityAt(cell);
+			
+			var map = __instance.Map;
+			var cellIndex = cell.CellToIndex(map);
+
+			var gasGrids = map.gasGrid.ParallelGasGrids();
+			var gasGridCount = gasGrids.Length;
+			
+			Color resultColor;
+			resultColor.r = gasGrids[0].DensityAt(cellIndex);
+			resultColor.g = gasGrids[1].DensityAt(cellIndex);
+			resultColor.b = gasGrids[2].DensityAt(cellIndex);
+			resultColor.a = gasGrids[3].DensityAt(cellIndex);
+
+			if (gasGridCount > 4)
+			{
+				for (var i = gasGridCount; i-- > 4;)
+				{
+					var density = gasGrids[i].DensityAt(cellIndex);
+					if (density > 0)
+						resultColor += gasGrids[i].Color * (density * 0.25f);
+				}
+				// Not remotely accurate, but the shader now essentially applies the previous version's formula with
+				// hardcoded values to each density in the result. High values, especially on a, lead to faded results.
+				// The choices are basically blind smoke color, tox gas color, rot stink color, dead life dust color, or
+				// something in between now
+			}
+			
+			return resultColor;
+		}
+#endif
 	}
 
 	public sealed class AddGasPatch : FishPrepatch
@@ -231,7 +320,13 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			for (var i = 0; i < gasGrids.Length; i++)
 				gasGrids[i].Clear();
 
-			__instance.map.mapDrawer.WholeMapChanged(MapMeshFlag.Gas);
+			__instance.map.mapDrawer.WholeMapChanged(
+#if V1_4
+				MapMeshFlag.Gas
+#else
+				MapMeshFlagDefOf.Gas
+#endif
+				);
 		}
 	}
 	
@@ -300,7 +395,15 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 				}
 				
 				if (anyGridDirty)
-					mapDrawer.MapMeshDirty(occupiedCell, MapMeshFlag.Gas);
+				{
+					mapDrawer.MapMeshDirty(occupiedCell,
+#if V1_4
+				MapMeshFlag.Gas
+#else
+						MapMeshFlagDefOf.Gas
+#endif
+					);
+				}
 			}
 		}
 
@@ -324,12 +427,23 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			var smokeGrid = grids[0];
 			var toxicGrid = grids[1];
 			var rotStinkGrid = grids[2];
+#if !V1_4
+			var deadLifeGrid = grids[3];
+#endif
 
 			for (var i = smokeGrid.CellCount; i-- > 0;)
 			{
-				__instance.gasDensity[i] = (rotStinkGrid.DensityAt(i) << 16)
+				__instance.gasDensity[i]
+#if V1_4
+					= (rotStinkGrid.DensityAt(i) << 16)
 					| (toxicGrid.DensityAt(i) << 8)
 					| smokeGrid.DensityAt(i);
+#else
+					= ((uint)deadLifeGrid.DensityAt(i) << 24)
+					| ((uint)rotStinkGrid.DensityAt(i) << 16)
+					| ((uint)toxicGrid.DensityAt(i) << 8)
+					| smokeGrid.DensityAt(i);
+#endif
 			}
 		}
 
@@ -342,14 +456,29 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			var smokeGrid = grids[0];
 			var toxicGrid = grids[1];
 			var rotStinkGrid = grids[2];
+#if !V1_4
+			var deadLifeGrid = grids[3];
+#endif
 			
 			for (var i = smokeGrid.CellCount; i-- > 0;)
 			{
 				var gasDensityAtCell = __instance.gasDensity[i];
 				
 				smokeGrid.SetDirect(i, (byte)gasDensityAtCell);
+				// ReSharper disable once RedundantCast
 				toxicGrid.SetDirect(i, (byte)((uint)gasDensityAtCell >> 8));
+				// ReSharper disable once RedundantCast
 				rotStinkGrid.SetDirect(i, (byte)((uint)gasDensityAtCell >> 16));
+#if !V1_4
+				deadLifeGrid.SetDirect(i, (byte)(gasDensityAtCell >> 24));
+#endif
+			}
+
+			for (var i = grids.Length; i-- > 0;)
+			{
+				var grid = grids[i];
+				grid.CycleIndexDiffusion = __instance.cycleIndexDiffusion;
+				grid.CycleIndexDissipation = __instance.cycleIndexDissipation;
 			}
 		}
 	}
@@ -444,6 +573,8 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 		private byte[] _gasDensity;
 		private volatile int _lastFinishedTick = -1;
 
+		private bool _allowedToRun;
+
 		public event Action<ParallelGasGrid>? Ticked;
 
 		public GasDef GasDef { get; private set; }
@@ -487,6 +618,16 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 		private void Initialize(Map map, GasDef gasDef)
 		{
 			GasDef = gasDef;
+
+			_allowedToRun = true switch
+			{
+				_ when gasDef == GasDefOf.ToxGas => ModLister.BiotechInstalled,
+#if !V1_4
+				_ when gasDef == GasDefOf.DeadLifeDust => ModLister.AnomalyInstalled,
+#endif
+				_ => true
+			};
+			
 			Map = map;
 			CellCount = map.cellIndices.NumGridCells;
 			_gasDensity = new byte[CellCount];
@@ -495,7 +636,7 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			SourceIndicesOfRandomCells = new int[CellCount];
 			CardinalDirections = new IntVec3[GenAdj.CardinalDirections.Length];
 			Array.Copy(GenAdj.CardinalDirections, CardinalDirections, GenAdj.CardinalDirections.Length);
-			CycleIndexDiffusion = Rand.Range(0, map.Area >> 1);
+			// CycleIndexDiffusion = Rand.Range(0, map.Area >> 1);
 
 			_dissipationTicker = new() { GasGrid = this };
 			_diffusionTicker = new() { GasGrid = this };
@@ -514,8 +655,14 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			// created per map while loading it's stupid
 			// Also cellsInRandomOrder itself initializes after gasGrid within CreateComponents, but that's easy to
 			// solve
-			grid.CellsInRandomOrder = grid.Map.cellsInRandomOrder.GetAll();
+			var map = grid.Map;
+			grid.CellsInRandomOrder = map.cellsInRandomOrder.GetAll();
 			grid.UpdateCellIndicesInRandomOrder();
+			
+			var mapGasGrid = map.gasGrid;
+			grid.CycleIndexDiffusion = mapGasGrid.cycleIndexDiffusion;
+			grid.CycleIndexDissipation = mapGasGrid.cycleIndexDissipation;
+			
 			grid.Ticked -= _onFirstTickAction;
 		}
 
@@ -585,7 +732,7 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 		
 		public void AddGas(in IntVec3 cell, int amount, bool canOverflow = true)
 		{
-			if (amount <= 0 || !GasCanMoveTo(cell))
+			if (amount <= 0 || !GasCanMoveTo(cell) || !_allowedToRun)
 				return;
 			
 			anyGasEverAdded = true;
@@ -593,7 +740,13 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 
 			SetDirect(index, AdjustedDensity(_gasDensity[index] + amount, out var overflow));
 			
-			Map.mapDrawer.MapMeshDirty(cell, MapMeshFlag.Gas);
+			Map.mapDrawer.MapMeshDirty(cell, 
+#if V1_4
+				MapMeshFlag.Gas
+#else
+				MapMeshFlagDefOf.Gas
+#endif
+				);
 			
 			if (canOverflow && overflow > 0)
 				Overflow(cell, overflow);
@@ -765,9 +918,15 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 #endif
 
 				_dissipationTicker.TickCells(area, (area + 63) >> 6); // Mathf.CeilToInt(area * (1f / 64f))
+				
+				var mapGasGrid = Map.gasGrid;
+				mapGasGrid.cycleIndexDissipation = CycleIndexDissipation;
 
 				if (Diffuses)
+				{
 					_diffusionTicker.TickCells(area, (area + 31) >> 5); // Mathf.CeilToInt(area * (1f / 32f))
+					mapGasGrid.cycleIndexDiffusion = CycleIndexDiffusion;
+				}
 
 #if GAS_DEBUG_L2
 			Debug.LogTotalGasChange(this, previousDensity);
@@ -817,7 +976,13 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			if (densityAfterDissipation == 0)
 			{
 				Debug.LogMapMeshDirty(this, index);
-				Map.mapDrawer.MapMeshDirty(IndexToCell(index), MapMeshFlag.Gas);
+				Map.mapDrawer.MapMeshDirty(IndexToCell(index),
+#if V1_4
+				MapMeshFlag.Gas
+#else
+					MapMeshFlagDefOf.Gas
+#endif
+					);
 			}
 		}
 
@@ -844,7 +1009,13 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 					continue;
 
 				SetDirect(otherCellIndex, (byte)densityOtOtherCell);
-				Map.mapDrawer.MapMeshDirty(otherCell, MapMeshFlag.Gas);
+				Map.mapDrawer.MapMeshDirty(otherCell,
+#if V1_4
+				MapMeshFlag.Gas
+#else
+					MapMeshFlagDefOf.Gas
+#endif
+					);
 				diffusedToAnyCell = true;
 				if (densityAtOriginCell < 17)
 					break;
@@ -854,7 +1025,13 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 				return;
 
 			SetDirect(originCellIndex, (byte)densityAtOriginCell);
-			Map.mapDrawer.MapMeshDirty(cell, MapMeshFlag.Gas);
+			Map.mapDrawer.MapMeshDirty(cell,
+#if V1_4
+				MapMeshFlag.Gas
+#else
+				MapMeshFlagDefOf.Gas
+#endif
+				);
 		}
 		
 		private static bool TryDiffuseIndividualGas(ref int gasA, ref int gasB)

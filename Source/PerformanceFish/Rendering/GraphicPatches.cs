@@ -3,40 +3,39 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-/*namespace PerformanceFish.Rendering;
-public sealed class GraphicPatches : ClassWithFishPatches
+using PerformanceFish.Prepatching;
+
+namespace PerformanceFish.Rendering;
+
+public sealed class GraphicPatches : ClassWithFishPrepatches
 {
-	public sealed class DrawMeshInt_Patch : FishPatch
+	public sealed class MultiInitFix : FishPrepatch
 	{
-		public override MethodBase TargetMethodInfo { get; }
-			= AccessTools.DeclaredMethod(typeof(Graphic), nameof(Graphic.DrawMeshInt));
+		public override string? Description { get; }
+			= "Fixes a bug in this type of Graphic that causes it to return with null material when failing to find a "
+			+ "texture, instead of the usual pink square seen in all other Graphics";
 
-		public static void Replacement(Graphic __instance, Mesh mesh, Vector3 loc, Quaternion quat, Material mat)
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(Graphic_Multi), nameof(Graphic_Multi.Init));
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static void Postfix(Graphic_Multi __instance)
 		{
-			Graphics.DrawMesh(mesh, loc, quat, mat, 0);
-		}
-	}
-
-	public sealed class Shadow_DrawWorker_Patch : FishPatch
-	{
-		public override MethodBase TargetMethodInfo { get; }
-			= AccessTools.DeclaredMethod(typeof(Graphic_Shadow), nameof(Graphic_Shadow.DrawWorker));
-
-		public static void Replacement(Graphic_Shadow __instance, Vector3 loc, Rot4 rot, ThingDef? thingDef, Thing thing,
-			float extraRotation)
-		{
-			if (__instance.shadowMesh is null
-				|| thingDef is null
-				|| __instance.shadowInfo is null
-				|| (Find.CurrentMap is { } map && loc.ToIntVec3().InBounds(map) && map.roofGrid.Roofed(loc.ToIntVec3()))
-				|| !DebugViewSettings.drawShadows)
-			{
+			if (__instance.MatSingle != null)
 				return;
-			}
 
-			var position = loc + __instance.shadowInfo.offset;
-			position.y = AltitudeLayer.Shadows.AltitudeFor();
-			Graphics.DrawMesh(__instance.shadowMesh, position, rot.AsQuat, MatBases.SunShadowFade, 0);
+			AssignBadMats(__instance);
+		}
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static void AssignBadMats(Graphic_Multi instance)
+		{
+			var mats = instance.mats;
+			for (var i = mats.Length; i-- > 0;)
+			{
+				if (mats[i] == null)
+					mats[i] = BaseContent.BadMat;
+			}
 		}
 	}
-}*/
+}

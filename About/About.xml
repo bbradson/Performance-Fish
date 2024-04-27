@@ -4,8 +4,10 @@
 	<packageId>bs.performance</packageId>
 	<supportedVersions>
 		<li>1.4</li>
+		<li>1.5</li>
 	</supportedVersions>
 	<author>bradson</author>
+	<modIconPath IgnoreIfNoMatchingField="True">PerformanceFish/ModIcon</modIconPath>
 	<url>https://github.com/bbradson/performance-fish</url>
 	<loadBefore>
 		<li>Dubwise.DubsPerformanceAnalyzer</li>

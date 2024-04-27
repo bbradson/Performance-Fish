@@ -138,7 +138,7 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 			+ "faster than the vanilla method. Replaces Performance Optimizer's error prone and slower optimization.";
 
 		public override MethodBase TargetMethodBase { get; }
-			= AccessTools.Method(typeof(ThingDef), nameof(ThingDef.HasComp));
+			= AccessTools.DeclaredMethod(typeof(ThingDef), nameof(ThingDef.HasComp), [typeof(Type)]);
 
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 			=> ilProcessor.ReplaceBodyWith(HasComp);
@@ -192,6 +192,69 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 		}
 	}
 	
+#if !V1_4
+	public sealed class ThingDefGenericHasCompPatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Optimizes HasComp lookups with a fast custom dictionary implementation. This is often more than 10x "
+			+ "faster than the vanilla method. Replaces Performance Optimizer's error prone and slower optimization.";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ThingDef), nameof(ThingDef.HasComp), []);
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+			=> ilProcessor.ReplaceBodyWith(HasComp<ThingComp>);
+
+		public static bool HasComp<T>(ThingDef thingDef) where T : ThingComp
+		{
+			if (thingDef.comps != null)
+			{
+				ref var cache = ref Cache.ByInt<ushort, CacheValue<T>>.GetOrAddReference(thingDef.shortHash);
+				
+				return !cache.IsDirty(thingDef.comps) ? cache.HasComp : UpdateCache(thingDef, ref cache);
+			}
+			return false;
+		}
+		
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static bool UpdateCache<T>(ThingDef thingDef, ref CacheValue<T> cache) where T : ThingComp
+		{
+			var targetType = typeof(T);
+			for (var i = 0; i < thingDef.comps.Count; i++)
+			{
+				var compClass = thingDef.comps[i].compClass;
+				if (compClass != targetType && !targetType.IsAssignableFrom(compClass))
+					continue;
+
+				cache.Update(thingDef, true);
+				return true;
+			}
+
+			cache.Update(thingDef, false);
+			return false;
+		}
+
+		public record struct CacheValue<T>() where T : ThingComp
+		{
+			private int _listVersion = -2;
+			public bool HasComp;
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public bool IsDirty(List<CompProperties> comps) => comps._version != _listVersion;
+
+			[MethodImpl(MethodImplOptions.NoInlining)]
+			public void Update(ThingDef thingDef, bool hasComp)
+			{
+				if (thingDef.shortHash == default)
+					return;
+				
+				_listVersion = thingDef.comps._version;
+				HasComp = hasComp;
+			}
+		}
+	}
+#endif
+	
 	public sealed class HediffCompPatch : FishPrepatch
 	{
 		public override string? Description { get; }
@@ -199,7 +262,7 @@ public sealed class GetCompCaching : ClassWithFishPrepatches
 			+ "faster than the vanilla method. Replaces Performance Optimizer's error prone and slower optimization.";
 
 		public override MethodBase TargetMethodBase { get; }
-			= methodof(HediffUtility.TryGetComp<HediffComp>);
+			= methodof((Func<Hediff, HediffComp>)HediffUtility.TryGetComp<HediffComp>);
 
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 			=> ilProcessor.ReplaceBodyWith(TryGetComp<HediffComp>);

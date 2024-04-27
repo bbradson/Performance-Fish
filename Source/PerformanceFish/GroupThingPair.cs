@@ -4,12 +4,15 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 using JetBrains.Annotations;
+// ReSharper disable InconsistentNaming
 
 namespace PerformanceFish;
 
 [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public record struct GroupThingPair
 {
+	public const int MaxValue = 0xFF_FF_FF;
+	
 	private uint _data;
 
 	public ThingRequestGroup ThingRequestGroup

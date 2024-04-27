@@ -95,6 +95,9 @@ public static class MiscExtensions
 		return false;
 	}
 
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static int SizeX(this Map map) => map.cellIndices.mapSizeX;
+
 	public static Map? TryGetMapHeld(this Thing thing)
 	{
 		var maps = Current.Game.Maps;

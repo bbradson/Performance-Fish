@@ -20,6 +20,15 @@ public static class OnAssembliesLoaded
 	public static void Start()
 	{
 		Loaded = true;
+
+		try
+		{
+			RuntimeHelpers.RunClassConstructor(typeof(ReflectionCaching).TypeHandle);
+		}
+		catch (Exception ex)
+		{
+			Log.Error(ex.ToString());
+		}
 		
 		TryPatchGraphicsSetter();
 		TryPatchPerformanceOptimizer();

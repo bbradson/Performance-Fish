@@ -66,11 +66,6 @@ public sealed class WorkGiver_DoBillPrepatches : ClassWithFishPrepatches
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
 
-		// public static CodeInstructions Transpiler(CodeInstructions codeInstructions, MethodBase method)
-		// 	=> Reflection.MakeReplacementCall(AccessTools.Method(
-		// 		typeof(TryFindBestIngredientsHelper_InnerDelegate_Patch), nameof(ReplacementBody),
-		// 		generics: new[] { DelegateInstanceType }));
-
 		public static bool ReplacementBody(object __instance, Region r)
 		{
 			var instance = _delegateInstance.Get(__instance);
@@ -86,8 +81,11 @@ public sealed class WorkGiver_DoBillPrepatches : ClassWithFishPrepatches
 				var bill = thingValidator.Bill;
 
 				if (HasNoFilters(bill) // apparently applies to a rim reborn benches?
+					|| bill.billStack?.billGiver
 #if V1_4
-					|| bill.billStack?.billGiver is Building_MechGestator
+						is Building_MechGestator
+#else
+						is Building_WorkTableAutonomous
 #endif
 					|| (BlackListedModExtensions.Count > 0
 						&& IsBlackListed(bill))) // <-- Fuck these too
@@ -532,9 +530,12 @@ public sealed class WorkGiver_DoBillOptimization : ClassWithFishPatches
 		public static void Prefix(ref bool alreadySorted, Bill? bill)
 			=> alreadySorted = alreadySorted
 				|| (bill?.billStack is { } stack
-#if V1_4
 					// ReSharper disable once MergeIntoPattern
-					&& stack.billGiver is not Building_MechGestator
+					&& stack.billGiver is not
+#if V1_4
+						Building_MechGestator
+#else
+						Building_WorkTableAutonomous
 #endif
 				);
 
@@ -575,8 +576,11 @@ public sealed class WorkGiver_DoBillOptimization : ClassWithFishPatches
 		public static void MarkIngredientCountAsFound(IngredientCount ingredientCount, Bill? bill)
 		{
 			if (bill?.billStack is not { } billStack
+				|| billStack.billGiver is
 #if V1_4
-				|| billStack.billGiver is Building_MechGestator
+					Building_MechGestator
+#else
+					Building_WorkTableAutonomous
 #endif
 			)
 			{

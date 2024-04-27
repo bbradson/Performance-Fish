@@ -5,16 +5,19 @@
 
 using System.Linq;
 using JetBrains.Annotations;
+#if V1_5
+using LudeonTK;
+#endif
 using UnityEngine.Rendering;
 
 namespace PerformanceFish.Utility;
 
-public static class PipetteTool
+public static class DebugActions
 {
 	[UsedImplicitly]
 	[DebugAction("Misc", "Pipette tool", actionType = DebugActionType.ToolMap,
 		allowedGameStates = AllowedGameStates.PlayingOnMap)]
-	public static void Action()
+	public static void PipetteTool()
 	{
 		var things = UI.MouseCell().GetThingList(Find.CurrentMap).ToList();
 		things.Sort(static (x, y) => ((int)x.def.altitudeLayer).CompareTo((int)y.def.altitudeLayer));
@@ -77,4 +80,11 @@ public static class PipetteTool
 
 	private static byte GetAverage(IEnumerable<Color32> colors, Func<Color32, int> selector)
 		=> (byte)Mathf.RoundToInt((float)colors.Average(selector));
+
+#if testing
+	[UsedImplicitly]
+	[DebugAction("Misc", "Test ListerThings", actionType = DebugActionType.ToolMap,
+		allowedGameStates = AllowedGameStates.PlayingOnMap)]
+	public static void TestListerThings() => Find.CurrentMap.listerThings.Remove(ThingMaker.MakeThing(ThingDefOf.Beer));
+#endif
 }

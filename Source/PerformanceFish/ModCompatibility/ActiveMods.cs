@@ -136,3 +136,22 @@ public static class ActiveMods
 		=> Log.Warning(
 			$"{modName} mod is missing. Performance Fish may not work correctly without this dependency.");
 }
+
+public static class Installed
+{
+	public static bool[] DLC =
+	[
+		ModLister.RoyaltyInstalled, ModLister.IdeologyInstalled, ModLister.BiotechInstalled
+#if !V1_4
+		, ModLister.AnomalyInstalled
+#endif
+	];
+}
+
+public enum DLCs
+{
+	Royalty,
+	Ideology,
+	Biotech,
+	Anomaly
+}

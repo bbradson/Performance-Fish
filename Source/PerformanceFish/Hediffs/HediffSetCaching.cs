@@ -15,6 +15,7 @@ using VisibleHediffCache
 using NotMissingPartsCache
 	= PerformanceFish.Cache.ByInt<Verse.HediffSet,
 		PerformanceFish.Hediffs.HediffSetCaching.NotMissingPartsCacheValue>;
+// ReSharper disable WithExpressionModifiesAllMembers
 
 namespace PerformanceFish.Hediffs;
 
@@ -24,26 +25,24 @@ public sealed class HediffSetPrecaching : ClassWithFishPrepatches
 	{
 		public override string Description { get; }
 			= "Caches results of the HediffSet.GetFirstHediffOfDef method. Impact scales with hediff count.";
-		
+
 		public override MethodBase TargetMethodBase { get; }
-			= SymbolExtensions.GetMethodInfo(static ()
-				=> default(HediffSet)!.GetFirstHediffOfDef(null, default));
+			= AccessTools.DeclaredMethod(typeof(HediffSet), nameof(HediffSet.GetFirstHediffOfDef));
 
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 			=> ilProcessor.ReplaceBodyWith(Replacement);
 		
 		public static Hediff? Replacement(HediffSet instance, HediffDef? def, bool mustBeVisible)
 		{
-			var canCache = true;
+			bool canCache;
 
-			if (instance.hediffs.Count >= 5
-				&& def is not null
-				// && def.GetType() == typeof(HediffDef) // different types have different indexing. Can't use those
-				)
+			if ((instance.hediffs.Count >= 5) & def is not null)
 			{
-				ref var cache = ref GetCacheValue(instance, def, mustBeVisible);
+				ref var cache = ref GetCacheValue(instance, def!, mustBeVisible);
 				if (!cache.Dirty)
 					return cache.Hediff;
+				
+				canCache = true;
 			}
 			else
 			{
@@ -75,7 +74,7 @@ public sealed class HediffSetPrecaching : ClassWithFishPrepatches
 		public static unsafe ref HediffSetCaching.HediffCacheValue GetCacheValue(HediffSet instance, HediffDef def,
 			bool mustBeVisible)
 		{
-			var key = new HediffCache { First = instance.pawn.thingIDNumber, Second = def.shortHash };
+			var key = default(HediffCache) with { First = instance.pawn.thingIDNumber, Second = def.shortHash };
 			ref var cache = ref mustBeVisible
 				? ref Unsafe.As<HediffSetCaching.VisibleHediffCacheValue, HediffSetCaching.HediffCacheValue>(
 					ref VisibleHediffCache.GetOrAddReference(Unsafe.As<HediffCache, VisibleHediffCache>(ref key)))
@@ -98,10 +97,10 @@ public sealed class HediffSetPrecaching : ClassWithFishPrepatches
 	{
 		public override string Description { get; }
 			= "Caches results of the HediffSet.HasHediff method. Impact scales with hediff count.";
-		
+
 		public override MethodBase TargetMethodBase { get; }
-			= SymbolExtensions.GetMethodInfo(static ()
-				=> default(HediffSet)!.HasHediff(null, default));
+			= AccessTools.DeclaredMethod(typeof(HediffSet), nameof(HediffSet.HasHediff),
+				[typeof(HediffDef), typeof(bool)]);
 
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 			=> ilProcessor.ReplaceBodyWith(Replacement);
@@ -117,7 +116,7 @@ public sealed class HediffSetPrecaching : ClassWithFishPrepatches
 			= "Caches results of the HediffSet.GetNotMissingParts method. Impact scales with hediff count.";
 
 		public override MethodBase TargetMethodBase { get; }
-			= AccessTools.Method(typeof(HediffSet), nameof(HediffSet.GetNotMissingParts));
+			= AccessTools.DeclaredMethod(typeof(HediffSet), nameof(HediffSet.GetNotMissingParts));
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static bool Prefix(HediffSet __instance, BodyPartHeight height, BodyPartDepth depth, BodyPartTagDef? tag,
@@ -160,11 +159,14 @@ public sealed class HediffSetCaching : ClassWithFishPatches
 {
 	public sealed class DirtyCache : FishPatch
 	{
+		public override List<Type> LinkedPatches { get; }
+			= [typeof(Pawn_PsychicEntropyTrackerOptimization.Psylink_Patch)];
+
 		public override string Description { get; }
-			= "Patched to trigger psylink cache clearing for the psychic entropy optimization.";
+			= "Patched to trigger psylink cache clearing for the psychic entropy optimization";
 
 		public override MethodBase TargetMethodInfo { get; }
-			= AccessTools.Method(typeof(HediffSet), nameof(HediffSet.DirtyCache));
+			= AccessTools.DeclaredMethod(typeof(HediffSet), nameof(HediffSet.DirtyCache));
 
 		public static void Postfix(HediffSet __instance)
 		{
@@ -175,9 +177,10 @@ public sealed class HediffSetCaching : ClassWithFishPatches
 
 	public record struct NotMissingPartsCacheValue()
 	{
-		private int _version = -1;
+		private int
+			_version = -1,
+			_nextRefreshTick;
 		private List<Hediff> _hediffsInSet = [];
-		private int _nextRefreshTick;
 		public List<BodyPartRecord> Parts = [];
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -204,9 +207,10 @@ public sealed class HediffSetCaching : ClassWithFishPatches
 
 	public record struct HediffCacheValue()
 	{
-		private int _version = -1;
+		private int
+			_version = -1,
+			_nextRefreshTick;
 		private List<Hediff> _hediffsInSet = [];
-		private int _nextRefreshTick;
 		public Hediff? Hediff;
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]

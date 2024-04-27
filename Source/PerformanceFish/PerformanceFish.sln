@@ -3,25 +3,31 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.1.31911.260
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PerformanceFish", "PerformanceFish.csproj", "{E8A3D63E-5850-4866-AB06-DBD44B11F67B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "1.5", "1.5.csproj", "{E8A3D63E-5850-4866-AB06-DBD44B11F67B}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "1.4", "1.4.csproj", "{0257ABCD-7009-4C7D-9BD8-599FC47595DB}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{6948F7E6-7ED7-4716-87EF-CFF1F465F561}"
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
-		..\..\1.4\Defs\GasDefs.xml = ..\..\1.4\Defs\GasDefs.xml
-		..\..\1.4\Defs\MainButtonDefs.xml = ..\..\1.4\Defs\MainButtonDefs.xml
+		..\..\Defs\GasDefs.xml = ..\..\Defs\GasDefs.xml
+		..\..\Defs\MainButtonDefs.xml = ..\..\Defs\MainButtonDefs.xml
 	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		v1.3|Any CPU = v1.3|Any CPU
-		v1.4|Any CPU = v1.4|Any CPU
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{E8A3D63E-5850-4866-AB06-DBD44B11F67B}.v1.3|Any CPU.ActiveCfg = v1.3|Any CPU
-		{E8A3D63E-5850-4866-AB06-DBD44B11F67B}.v1.3|Any CPU.Build.0 = v1.3|Any CPU
-		{E8A3D63E-5850-4866-AB06-DBD44B11F67B}.v1.4|Any CPU.ActiveCfg = v1.4|Any CPU
-		{E8A3D63E-5850-4866-AB06-DBD44B11F67B}.v1.4|Any CPU.Build.0 = v1.4|Any CPU
+		{E8A3D63E-5850-4866-AB06-DBD44B11F67B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E8A3D63E-5850-4866-AB06-DBD44B11F67B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E8A3D63E-5850-4866-AB06-DBD44B11F67B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E8A3D63E-5850-4866-AB06-DBD44B11F67B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0257ABCD-7009-4C7D-9BD8-599FC47595DB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0257ABCD-7009-4C7D-9BD8-599FC47595DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0257ABCD-7009-4C7D-9BD8-599FC47595DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0257ABCD-7009-4C7D-9BD8-599FC47595DB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

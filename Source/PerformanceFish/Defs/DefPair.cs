@@ -5,7 +5,7 @@
 
 using JetBrains.Annotations;
 
-namespace PerformanceFish;
+namespace PerformanceFish.Defs;
 
 [UsedImplicitly(ImplicitUseTargetFlags.WithMembers)]
 public record struct DefPair

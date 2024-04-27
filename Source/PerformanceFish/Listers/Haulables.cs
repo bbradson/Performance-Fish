@@ -97,13 +97,18 @@ public sealed class Haulables : ClassWithFishPrepatches
 	public sealed class TickPatch : FishPrepatch
 	{
 		public override string? Description { get; }
+#if V1_4
 			= "Essentially fixes a bug that was causing the method to tick cells multiple times for storages with less "
 			+ "than 4 cells. Not ticking multiple times leads to a performance improvement. Also handles things queued "
 			+ "for removal by the StoreUtilityPrepatches:TryFindBestBetterStoreCellFor patch";
+#else
+			= "Handles things queued for removal by the StoreUtilityPrepatches:TryFindBestBetterStoreCellFor patch";
+#endif
 
 		public override MethodBase TargetMethodBase { get; }
 			= AccessTools.DeclaredMethod(typeof(ListerHaulables), nameof(ListerHaulables.ListerHaulablesTick));
 
+#if V1_4
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 		{
 			var instructions = ilProcessor.instructions;
@@ -120,6 +125,7 @@ public sealed class Haulables : ClassWithFishPrepatches
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static int GetCellCountToTick(int original, SlotGroup slotGroup)
 			=> Math.Min(original, slotGroup.CellsList.Count);
+#endif
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static void Postfix(ListerHaulables __instance)
@@ -140,6 +146,35 @@ public sealed class Haulables : ClassWithFishPrepatches
 			thingsQueuedToRemove.Clear();
 		}
 	}
+	
+#if !V1_4
+	public sealed class CellsCheckTickPatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Essentially fixes a bug that was causing the method to tick cells multiple times for storages with less "
+			+ "than 4 cells. Not ticking multiple times leads to a performance improvement";
+
+		public override MethodBase TargetMethodBase { get; }
+			= AccessTools.DeclaredMethod(typeof(ListerHaulables), nameof(ListerHaulables.CellsCheckTick));
+
+		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+		{
+			var instructions = ilProcessor.instructions;
+			
+			var fourInstructionIndex = instructions.FirstIndexOf(static code
+				=> code.OpCode == OpCodes.Ldc_I4_4 || (code.OpCode == OpCodes.Ldc_I4 && code.Operand is 4));
+
+			ilProcessor.InsertRange(fourInstructionIndex + 1,
+				(OpCodes.Ldloc,
+					ilProcessor.Body.Variables.First(static local => local.VariableType.Is(typeof(SlotGroup)))),
+				(OpCodes.Call, methodof(GetCellCountToTick)));
+		}
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static int GetCellCountToTick(int original, SlotGroup slotGroup)
+			=> Math.Min(original, slotGroup.CellsList.Count);
+	}
+#endif
 	
 	public record struct Cache()
 	{
