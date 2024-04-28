@@ -560,7 +560,17 @@ public sealed class Things : ClassWithFishPatches
 		public readonly FishTable<Type, IList> ThingsByType = new()
 		{
 			ValueInitializer = static type
-				=> (IList)Activator.CreateInstance(typeof(IndexedFishSet<>).MakeGenericType(type))
+				=> (IList)_thingsListInitializerDefinition.MakeGenericMethod(type).Invoke(null, null)
 		};
+
+		private static readonly MethodInfo _thingsListInitializerDefinition
+			= methodof(InitializeThingsList<Thing>).GetGenericMethodDefinition();
+		
+		public static unsafe IndexedFishSet<T> InitializeThingsList<T>() where T : Thing
+#pragma warning disable CS8622
+			=> new(static () => new(0, keyHashCodeByRefGetter: &GetKeyByRef, keyHashCodeGetter: &ThingHelper.GetKey));
+#pragma warning restore CS8622
+
+		private static int GetKeyByRef<T>(ref T thing) where T : Thing => thing.GetKey();
 	}
 }
