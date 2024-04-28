@@ -99,11 +99,11 @@ public sealed class PrintImprovements : ClassWithFishPrepatches
 
 				if (printPlaneIndex < 0)
 				{
-					throw new InvalidOperationException(
+					ThrowHelper.ThrowInvalidOperationException(
 						"Failed to find center variable load instruction for PrintPlane call");
 				}
-				
-				ilProcessor.InsertAt(printPlaneIndex + 1, (OpCodes.Call, methodof(AdjustCenter)));
+
+				ilProcessor.InsertRange(printPlaneIndex + 1, OpCodes.Ldarg_0, (OpCodes.Call, methodof(AdjustCenter)));
 			}
 			finally
 			{
@@ -111,11 +111,21 @@ public sealed class PrintImprovements : ClassWithFishPrepatches
 			}
 		}
 
-		public static Vector3 AdjustCenter(Vector3 center)
+		public static Vector3 AdjustCenter(Vector3 center, Plant plant)
 		{
-			if (Math.Abs(center.y - LowPlantAltitude) <= 0.001f)
-				center.y += 0.005f;
-			
+			if (Math.Abs(center.y - LowPlantAltitude) > 0.001f)
+				return center;
+
+			var plantPosition = plant.PositionHeld;
+			var map = plant.MapHeld;
+			if (map.edificeGrid[plantPosition.CellToIndex(map)] is
+			{
+				def.altitudeLayer: AltitudeLayer.LowPlant
+			} building)
+			{
+				center.y += ((plantPosition.z - building.OccupiedRect().minZ) * 0.01f) + 0.005f;
+			}
+
 			return center;
 		}
 

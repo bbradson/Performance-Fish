@@ -101,12 +101,7 @@ public static class ActiveMods
 	}
 
 	private static void CheckFisheryVersion()
-	{
-		if (FisheryLib.FisheryLib.VERSION > FisheryLib.FisheryLib.CurrentlyLoadedVersion)
-			ErrorForOutdatedModDependency(nameof(Fishery));
-		else
-			CheckDependencyVersion(nameof(Fishery), typeof(FisheryLib.FisheryLib), "1Fishery");
-	}
+		=> CheckDependencyVersion(nameof(Fishery), typeof(FisheryLib.FisheryLib), "1Fishery");
 
 	private static void CheckHarmonyVersion()
 		=> CheckDependencyVersion(nameof(Harmony), typeof(Harmony), "0Harmony");
@@ -164,11 +159,7 @@ public static class ActiveMods
 
 		return firstFoundAssemblyDir ?? "Unknown";
 	}
-
-	private static void ErrorForOutdatedModDependency(string modName)
-		=> Log.Error($"Outdated {modName} mod detected. {
-			modName} must be updated for Performance Fish to work correctly");
-
+	
 	private static void ThrowForMissingModDependency(string modName)
 	{
 		Log.Error($"{modName} mod is missing. Performance Fish requires this mod in order to function.");
