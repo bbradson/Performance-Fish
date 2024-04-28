@@ -39,65 +39,6 @@ public sealed class UtilityPrepatches : ClassWithFishPrepatches
 		}
 	}
 
-	public sealed class BetterPrinting : FishPrepatch
-	{
-		public override string? Description { get; }
-			= "Attempt at fixing the clipping between textures by slightly adjusting their angle to have the top left "
-			+ "placed closer to the camera than the bottom right";
-	
-		public override MethodBase TargetMethodBase { get; } = methodof(Printer_Plane.PrintPlane);
-	
-		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
-		{
-			var codes = ilProcessor.instructions;
-		
-			var altitudeBiasParameter = ilProcessor.GetParameter("topVerticesAltitudeBias");
-			var sizeParameter = ilProcessor.GetParameter("size");
-		
-			var altitudeBiasIndex = codes.FirstIndexOf(code => code.Operand == altitudeBiasParameter);
-			
-			LoadSizeAtAndCall(altitudeBiasIndex, TopLeftAdjustment);
-		
-			while (codes[++altitudeBiasIndex].Operand != altitudeBiasParameter)
-				;
-			
-			LoadSizeAtAndCall(altitudeBiasIndex, TopRightAdjustment);
-			
-			while (codes[--altitudeBiasIndex].Operand is not 0f)
-				;
-			
-			LoadSizeAtAndCall(altitudeBiasIndex, BottomLeftAdjustment);
-			
-			while (codes[++altitudeBiasIndex].Operand is not 0f)
-				;
-			
-			LoadSizeAtAndCall(altitudeBiasIndex, BottomRightAdjustment);
-
-			void LoadSizeAtAndCall(int instructionIndex, Delegate method)
-			{
-				codes[instructionIndex].OpCode = OpCodes.Ldarga;
-				codes[instructionIndex].Operand = sizeParameter;
-				ilProcessor.InsertAt(instructionIndex + 1, (OpCodes.Call, method.Method));
-			}
-		}
-		
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static float TopLeftAdjustment(in Vector2 size)
-			=>  (size.y * 0.0045f) + (size.x * 0.0005f);
-	
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static float TopRightAdjustment(in Vector2 size)
-			=>  (size.y * 0.0045f) - (size.x * 0.0005f);
-	
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static float BottomLeftAdjustment(in Vector2 size)
-			=>  (size.y * -0.0045f) + (size.x * 0.0005f);
-		
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static float BottomRightAdjustment(in Vector2 size)
-			=>  (size.y * -0.0045f) - (size.x * 0.0005f);
-	}
-
 	public sealed class NoSteamLogWarning : FishPrepatch
 	{
 		public override string? Description { get; }

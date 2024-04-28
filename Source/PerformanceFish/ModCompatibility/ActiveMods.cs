@@ -104,6 +104,8 @@ public static class ActiveMods
 	{
 		if (FisheryLib.FisheryLib.VERSION > FisheryLib.FisheryLib.CurrentlyLoadedVersion)
 			ErrorForOutdatedModDependency(nameof(Fishery));
+		else
+			CheckDependencyVersion(nameof(Fishery), typeof(FisheryLib.FisheryLib), "1Fishery");
 	}
 
 	private static void CheckHarmonyVersion()
@@ -112,15 +114,56 @@ public static class ActiveMods
 	private static void CheckDependencyVersion(string dependencyName, Type dependencyType,
 		string dependencyAssemblyName)
 	{
-		if (typeof(PerformanceFishMod).Assembly.GetReferencedAssemblyVersion(dependencyAssemblyName)
-			> dependencyType.Assembly.GetLoadedVersion())
-		{
-			ErrorForOutdatedModDependency(dependencyName);
-		}
+		var expectedVersion = typeof(PerformanceFishMod).Assembly.GetReferencedAssemblyVersion(dependencyAssemblyName);
+		var loadedAssembly = dependencyType.Assembly;
+		if (expectedVersion > loadedAssembly.GetLoadedVersion())
+			LogForOutdatedModDependency(dependencyName, expectedVersion, loadedAssembly);
 	}
 
 	private static void ErrorForIncorrectLoadOrder(string dependencyName)
 		=> Log.Error($"Incorrect load order detected. {dependencyName} must be loaded before any mod depending on it.");
+
+	private static void LogForOutdatedModDependency(string modName, Version expected, Assembly loaded)
+	{
+		var loadedVersion = loaded.GetLoadedVersion();
+		var modMessage = $"Outdated {modName} mod detected. Expected {expected}, loaded is {
+			loadedVersion} from path \"{TryGetAssemblyLocation(loaded)}\". {modName} ";
+		var beUpdated = " be updated for Performance Fish to work correctly";
+		
+		if (loadedVersion.Major >= expected.Major && loadedVersion.Minor >= expected.Minor)
+			Log.Warning($"{modMessage}may need to{beUpdated}");
+		else
+			Log.Error($"{modMessage}must{beUpdated}");
+	}
+
+	private static string TryGetAssemblyLocation(Assembly assembly)
+	{
+		var location = assembly.Location;
+		if (!location.NullOrEmpty())
+			return location;
+
+		var assemblyName = assembly.GetName().Name;
+		var firstFoundAssemblyDir = default(string);
+		var allMods = LoadedModManager.RunningModsListForReading;
+		var count = allMods.Count;
+		for (var i = 0; i < count; i++)
+		{
+			var mod = allMods[i];
+			if (mod.TryGetAssembly(assemblyName) is not { } foundAssembly)
+				continue;
+
+			if (foundAssembly == assembly)
+				return mod.RootDir;
+			
+			if (firstFoundAssemblyDir != null)
+				continue;
+
+			var foundAssemblyLocation = foundAssembly.Location;
+			firstFoundAssemblyDir = !foundAssemblyLocation.NullOrEmpty() ? foundAssemblyLocation : mod.RootDir;
+		}
+
+		return firstFoundAssemblyDir ?? "Unknown";
+	}
 
 	private static void ErrorForOutdatedModDependency(string modName)
 		=> Log.Error($"Outdated {modName} mod detected. {

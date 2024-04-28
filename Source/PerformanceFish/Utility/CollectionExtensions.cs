@@ -312,14 +312,13 @@ public static class CollectionExtensions
 	public static List<T> AsOrToList<T>(this IEnumerable<T> enumerable) => enumerable as List<T> ?? enumerable.ToList();
 
 	public static unsafe ref T GetReference<T>(this NativeArray<T> nativeArray, int index) where T : struct
-		=> ref Unsafe.AsRef<T>(Unsafe.Add<T>(NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(nativeArray),
-			index));
+		=> ref Unsafe.AsRef<T>((T*)NativeArrayUnsafeUtility.GetUnsafeBufferPointerWithoutChecks(nativeArray) + index);
 
 	public static void UnwrapArray<T>(this List<T> list, out T[] array, out int count)
 	{
 		array = list._items;
 		count = list._size;
-		Guard.IsLessThanOrEqualTo(count, array.Length);
+		Guard.IsLessThanOrEqualTo((uint)count, (uint)array.Length);
 	}
 	
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
