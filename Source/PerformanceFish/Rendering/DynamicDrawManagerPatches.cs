@@ -55,7 +55,7 @@ public sealed class DynamicDrawManagerPatches : ClassWithFishPrepatches
 			}
 			catch (Exception ex)
 			{
-				Log.Error("Exception drawing dynamic things: " + ex);
+				Log.Error($"Exception drawing dynamic things for map '{instance.map}':\n{ex}");
 			}
 			finally
 			{
@@ -92,7 +92,7 @@ public sealed class DynamicDrawManagerPatches : ClassWithFishPrepatches
 						ThingsToDraw.Add(drawThing);
 						
 						if (!DebugViewSettings.singleThreadedDrawing)
-							drawThing.DynamicDrawPhase(DrawPhase.EnsureInitialized);
+							EnsureInitialized(drawThing);
 					}
 					else if (drawThing is Pawn pawn && checkShadows && shadowViewRect.Contains(drawThing.Position))
 					{
@@ -102,6 +102,18 @@ public sealed class DynamicDrawManagerPatches : ClassWithFishPrepatches
 			}
 		}
 
+		public static void EnsureInitialized(Thing drawThing)
+		{
+			try
+			{
+				drawThing.DynamicDrawPhase(DrawPhase.EnsureInitialized);
+			}
+			catch (Exception ex)
+			{
+				Logging.EnsureInitializedException(drawThing, ex);
+			}
+		}
+		
 		public static void DrawShadowsNow()
 		{
 			PawnShadowsToDraw.UnwrapArray(out var pawnShadowsToDraw, out var pawnShadowsToDrawCount);
@@ -115,7 +127,7 @@ public sealed class DynamicDrawManagerPatches : ClassWithFishPrepatches
 				}
 				catch (Exception ex)
 				{
-					Log.Error($"Exception drawing shadow for '{pawn}': {ex}");
+					Logging.DrawShadowException(pawn, ex);
 				}
 			}
 		}
@@ -133,7 +145,7 @@ public sealed class DynamicDrawManagerPatches : ClassWithFishPrepatches
 				}
 				catch (Exception ex)
 				{
-					Log.Error($"Exception drawing '{drawThing}': {ex}");
+					Logging.DrawException(drawThing, ex);
 				}
 			}
 		}
@@ -181,7 +193,38 @@ public sealed class DynamicDrawManagerPatches : ClassWithFishPrepatches
 		{
 			public Thing[] thingsToDraw = Array.Empty<Thing>();
 			
-			public void Execute(int index) => thingsToDraw[index].DynamicDrawPhase(DrawPhase.ParallelPreDraw);
+			public void Execute(int index)
+			{
+				var thing = thingsToDraw[index];
+				try
+				{
+					thing.DynamicDrawPhase(DrawPhase.ParallelPreDraw);
+				}
+				catch (Exception ex)
+				{
+					Logging.ParallelPreDrawException(thing, ex);
+				}
+			}
+		}
+
+		public static class Logging
+		{
+			[MethodImpl(MethodImplOptions.NoInlining)]
+			public static void EnsureInitializedException(Thing drawThing, Exception ex)
+				=> Log.Error($"Exception in EnsureInitialized for '{drawThing}' at cell {
+					drawThing.PositionHeld}:\n{ex}");
+
+			[MethodImpl(MethodImplOptions.NoInlining)]
+			public static void DrawException(Thing drawThing, Exception ex)
+				=> Log.Error($"Exception drawing '{drawThing}' at cell {drawThing.PositionHeld}:\n{ex}");
+
+			[MethodImpl(MethodImplOptions.NoInlining)]
+			public static void DrawShadowException(Pawn pawn, Exception ex)
+				=> Log.Error($"Exception drawing shadow for '{pawn}' at cell {pawn.PositionHeld}:\n{ex}");
+			
+			[MethodImpl(MethodImplOptions.NoInlining)]
+			public static void ParallelPreDrawException(Thing thing, Exception ex)
+				=> Log.Error($"Exception in ParallelPreDraw for '{thing}' at cell {thing.PositionHeld}:\n{ex}");
 		}
 	}
 }

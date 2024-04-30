@@ -24,4 +24,6 @@ public record struct CellIndex(int Value)
 	public bool IsFogged(Map map) => map.fogGrid.fogGrid[Value];
 
 	public float GetSnowDepth(Map map) => map.snowGrid.depthGrid[Value];
+
+	public Building? GetEdifice(Map map) => map.edificeGrid[Value];
 }

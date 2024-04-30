@@ -17,6 +17,8 @@ public sealed class HaulDestinationManagerPatches : ClassWithFishPrepatches
 			= AccessTools.DeclaredMethod(typeof(HaulDestinationManager),
 				nameof(HaulDestinationManager.Notify_HaulDestinationChangedPriority));
 
+		public static void Prefix(HaulDestinationManager __instance) => __instance.RecalculateStorageGroupMemberCount();
+
 		public static void Postfix(HaulDestinationManager __instance)
 			=> __instance.Cache().OnPriorityChanged(__instance);
 	}
@@ -28,6 +30,12 @@ public sealed class HaulDestinationManagerPatches : ClassWithFishPrepatches
 		public override MethodBase TargetMethodBase { get; }
 			= AccessTools.DeclaredMethod(typeof(HaulDestinationManager),
 				nameof(HaulDestinationManager.AddHaulDestination));
+
+		public static void Prefix(HaulDestinationManager __instance, IHaulDestination haulDestination)
+		{
+			if (haulDestination is IStorageGroupMember { Group: { } group })
+				group.SpawnedMemberCount()++;
+		}
 
 		public static void Postfix(HaulDestinationManager __instance, IHaulDestination haulDestination)
 		{
@@ -46,6 +54,12 @@ public sealed class HaulDestinationManagerPatches : ClassWithFishPrepatches
 		public override MethodBase TargetMethodBase { get; }
 			= AccessTools.DeclaredMethod(typeof(HaulDestinationManager),
 				nameof(HaulDestinationManager.RemoveHaulDestination));
+
+		public static void Prefix(HaulDestinationManager __instance, IHaulDestination haulDestination)
+		{
+			if (haulDestination is IStorageGroupMember { Group: { } group })
+				group.SpawnedMemberCount()--;
+		}
 
 		public static void Postfix(HaulDestinationManager __instance, IHaulDestination haulDestination)
 		{
@@ -76,8 +90,8 @@ public sealed class HaulDestinationManagerPatches : ClassWithFishPrepatches
 			if (__result != 0)
 				return __result;
 			
-			var storageSettingsGroupA = a.TryGetStorageGroup();
-			var storageSettingsGroupB = b.TryGetStorageGroup();
+			var storageSettingsGroupA = a.StorageGroup;
+			var storageSettingsGroupB = b.StorageGroup;
 
 			return storageSettingsGroupA == null
 				? storageSettingsGroupB == null
@@ -91,7 +105,7 @@ public sealed class HaulDestinationManagerPatches : ClassWithFishPrepatches
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static int CompareStorageSettingsGroups(StorageGroup a, StorageGroup b)
 		{
-			var result = b.MemberCount.CompareTo(a.MemberCount);
+			var result = b.SpawnedMemberCount().CompareTo(a.SpawnedMemberCount());
 			return result != 0 ? result : a.loadID.CompareTo(b.loadID);
 		}
 	}

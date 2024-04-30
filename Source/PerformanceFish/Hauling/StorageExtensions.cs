@@ -36,6 +36,21 @@ public static class StorageExtensions
 		=> slotGroup.parent is Building storage
 			? storage.TrueItemsPerCell() * cellCount
 			: cellCount;
+	
+	public static void RecalculateStorageGroupMemberCount(this HaulDestinationManager haulDestinationManager)
+	{
+		haulDestinationManager.map.storageGroups.groups.UnwrapArray(out var storageGroups, out var storageGroupCount);
+		for (var i = storageGroupCount; --i >= 0;)
+			storageGroups.UnsafeLoad(i).SpawnedMemberCount() = 0;
+
+		haulDestinationManager.AllGroupsListInPriorityOrder.UnwrapArray(out var slotGroupsByPriority,
+			out var slotGroupCount);
+		for (var i = slotGroupCount; --i >= 0;)
+		{
+			if (slotGroupsByPriority.UnsafeLoad(i).StorageGroup is { } storageGroup)
+				storageGroup.SpawnedMemberCount()++;
+		}
+	}
 
 	static StorageExtensions()
 	{

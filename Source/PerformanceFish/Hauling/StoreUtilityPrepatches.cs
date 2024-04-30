@@ -254,7 +254,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 
 #if STORAGE_GROUP_DEBUG
 			if (!Debug.LoggedOnce && !(Current.Game?.tickManager?.Paused ?? true))
-				Debug.LogStuff(listInPriorityOrder);
+				Debug.LogStuff(haulDestinationManager);
 #endif
 			
 			var foundPriority = currentPriority;
@@ -287,10 +287,10 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 					
 					var slotGroup = listInPriorityOrder[i++];
 					int otherGroupMembers;
-					var storageGroup = slotGroup.TryGetStorageGroup();
+					var storageGroup = slotGroup.StorageGroup;
 					if (storageGroup != null)
 					{
-						otherGroupMembers = storageGroup.MemberCount - 1;
+						otherGroupMembers = storageGroup.SpawnedMemberCount() - 1;
 						Debug.VerifyStorageGroup(otherGroupMembers, listInPriorityOrder, i, storageGroup);
 						
 						groupsOfPriorityCount -= otherGroupMembers;
@@ -334,19 +334,18 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			return true;
 			
 		FixCache:
-			if (hadToFixCache)
+			if (!hadToFixCache)
+			{
+				hadToFixCache = true;
+				UpdateCache(haulDestinationManager);
+				goto StartOfLoop;
+			}
+			else
 			{
 				LogErrorForFailedTryFindBestBetterStoreCellForAttempt(t, carrier, map, currentPriority, faction,
 					closestSlot);
 				goto Result;
 			}
-			else
-			{
-				hadToFixCache = true;
-			}
-			
-			UpdateCache(haulDestinationManager);
-			goto StartOfLoop;
 		}
 
 		[MethodImpl(MethodImplOptions.NoInlining)]
@@ -357,11 +356,29 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 					map}', currentPriority '{currentPriority}', faction '{
 						faction}'. The last found cell was '{
 							closestSlot}'. It is most likely incompatible with something in the mod list.\n{
-								Debug.GetStorageGroupInfo(map?.haulDestinationManager?.AllGroupsListInPriorityOrder)}");
+								Debug.GetStorageGroupInfo(map?.haulDestinationManager)}");
 
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static void UpdateCache(HaulDestinationManager haulDestinationManager)
 		{
+			var storageGroups = haulDestinationManager.map.storageGroups.groups;
+			for (var i = storageGroups.Count; i-- > 0;)
+			{
+				var group = storageGroups[i];
+				var members = group.members;
+				for (var j = members.Count; j-- > 0;)
+				{
+					var member = members[j];
+					if (member.Group != group)
+						members.RemoveAt(j);
+				}
+				
+				if (members.Count == 0)
+					storageGroups.RemoveAt(i);
+			}
+			
+			haulDestinationManager.RecalculateStorageGroupMemberCount();
+			
 			haulDestinationManager.AllGroupsListInPriorityOrder.InsertionSort(HaulDestinationManager
 				.CompareSlotGroupPrioritiesDescending);
 			haulDestinationManager.Cache().OnPriorityChanged(haulDestinationManager);
@@ -404,36 +421,36 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 				for (var b = otherGroupMembers; b-- > 0;)
 				{
 					var otherSlotGroup = listInPriorityOrder[i + b];
-					if (otherSlotGroup.TryGetStorageGroup() == storageGroup)
+					if (otherSlotGroup.StorageGroup == storageGroup)
 						continue;
 
 					Log.Error($"Incorrect haul destination order! Storage '{
 						otherSlotGroup.parent}' was expected to have Storage group '{storageGroup}', but had '{
-							otherSlotGroup.TryGetStorageGroup().ToStringSafe()}' instead");
+							otherSlotGroup.StorageGroup.ToStringSafe()}' instead");
 				}
 			}
 
 			[Conditional("STORAGE_GROUP_DEBUG")]
-			public static void LogStuff(List<SlotGroup> listInPriorityOrder)
+			public static void LogStuff(HaulDestinationManager haulDestinationManager)
 			{
 				LoggedOnce = true;
-				Log.Message(GetStorageGroupInfo(listInPriorityOrder));
+				Log.Message(GetStorageGroupInfo(haulDestinationManager));
 			}
 
-			public static string GetStorageGroupInfo(List<SlotGroup>? slotGroupsInPriorityOrder)
+			public static string GetStorageGroupInfo(HaulDestinationManager? haulDestinationManager)
 			{
+				var slotGroupsInPriorityOrder = haulDestinationManager?.AllGroupsListInPriorityOrder;
 				if (slotGroupsInPriorityOrder is null)
 					return string.Empty;
 				
-				var storageGroups = slotGroupsInPriorityOrder.Select(static slotGroup => slotGroup.TryGetStorageGroup())
-					.Where(Is.NotNull).Distinct().ToList();
+				var storageGroups = haulDestinationManager!.map.storageGroups.groups;
 
 				return StringHelper.Resolve($"SlotGroup count: {
 					slotGroupsInPriorityOrder.Count}, StorageGroup count: {
 						storageGroups.Count}, slotGroups in storage groups: {storageGroups
-							.Select(static group => group!.MemberCount)
+							.Select(static group => group!.SpawnedMemberCount())
 							.Sum()}, outside of storage groups: {slotGroupsInPriorityOrder
-							.Select(static slotGroup => slotGroup.TryGetStorageGroup())
+							.Select(static slotGroup => slotGroup.StorageGroup)
 							.Where(Is.Null).Count()}");
 			}
 

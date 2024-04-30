@@ -13,6 +13,11 @@ namespace PerformanceFish.Rendering;
 
 public sealed class PrintImprovements : ClassWithFishPrepatches
 {
+	public const float
+		X_ADJUSTMENT = 0.0005f,
+		Y_ADJUSTMENT = 0.0045f,
+		COMBINED_ADJUSTMENT = X_ADJUSTMENT + Y_ADJUSTMENT;
+	
 	public sealed class PrintPlanePatch : FishPrepatch
 	{
 		public override string? Description { get; }
@@ -57,19 +62,19 @@ public sealed class PrintImprovements : ClassWithFishPrepatches
 		
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float TopLeftAdjustment(in Vector2 size)
-			=>  (size.y * 0.0048f) + (size.x * 0.0002f);
+			=>  (size.y * Y_ADJUSTMENT) + (size.x * X_ADJUSTMENT);
 	
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float TopRightAdjustment(in Vector2 size)
-			=>  (size.y * 0.0048f) - (size.x * 0.0002f);
+			=>  (size.y * Y_ADJUSTMENT) - (size.x * X_ADJUSTMENT);
 	
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float BottomLeftAdjustment(in Vector2 size)
-			=>  (size.y * -0.0048f) + (size.x * 0.0002f);
+			=>  (size.y * -Y_ADJUSTMENT) + (size.x * X_ADJUSTMENT);
 		
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static float BottomRightAdjustment(in Vector2 size)
-			=>  (size.y * -0.0048f) - (size.x * 0.0002f);
+			=>  (size.y * -Y_ADJUSTMENT) - (size.x * X_ADJUSTMENT);
 	}
 
 	public sealed class PlantPatch : FishPrepatch
@@ -113,22 +118,22 @@ public sealed class PrintImprovements : ClassWithFishPrepatches
 
 		public static Vector3 AdjustCenter(Vector3 center, Plant plant)
 		{
-			if (Math.Abs(center.y - LowPlantAltitude) > 0.001f)
+			var plantAltitude = plant.def.altitudeLayer;
+			if (Math.Abs(center.y - plantAltitude.AltitudeFor()) >= COMBINED_ADJUSTMENT)
 				return center;
 
-			var plantPosition = plant.PositionHeld;
 			var map = plant.MapHeld;
-			if (map.edificeGrid[plantPosition.CellToIndex(map)] is
+			if (map.edificeGrid[plant.PositionHeld.CellToIndex(map)] is { } building
+				&& building.def.altitudeLayer == plantAltitude)
 			{
-				def.altitudeLayer: AltitudeLayer.LowPlant
-			} building)
-			{
-				center.y += ((plantPosition.z - building.OccupiedRect().minZ) * 0.01f) + 0.005f;
+				var buildingDrawPos = building.DrawPos;
+				var buildingSize = building.GetRotatedDrawSize();
+
+				center.y += ((buildingSize.y - (buildingDrawPos.z - center.z)) * Y_ADJUSTMENT)
+					+ ((buildingSize.x - (buildingDrawPos.x - center.x)) * X_ADJUSTMENT);
 			}
 
 			return center;
 		}
-
-		public static readonly float LowPlantAltitude = AltitudeLayer.LowPlant.AltitudeFor();
 	}
 }

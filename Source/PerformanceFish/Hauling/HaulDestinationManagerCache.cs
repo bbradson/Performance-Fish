@@ -11,16 +11,15 @@ public record struct HaulDestinationManagerCache()
 
 	public event Action<HaulDestinationManager>? PriorityChanged;
 	
-	public int[] GroupCountByPriority = new int[StoragePriorityCount];
+	public readonly int[] GroupCountByPriority = new int[StoragePriorityCount];
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	public void OnPriorityChanged(HaulDestinationManager manager)
 	{
-		var slotGroupsByPriority = manager.AllGroupsListInPriorityOrder;
-		
-		Array.Clear(GroupCountByPriority, 0, GroupCountByPriority.Length);
-		for (var i = slotGroupsByPriority.Count; i-- > 0;)
-			GroupCountByPriority[(int)slotGroupsByPriority[i].Settings.Priority]++;
+		GroupCountByPriority.Clear();
+		manager.AllGroupsListInPriorityOrder.UnwrapArray(out var slotGroupsByPriority, out var slotGroupCount);
+		for (var i = slotGroupCount; --i >= 0;)
+			GroupCountByPriority[(int)slotGroupsByPriority.UnsafeLoad(i).Settings.Priority]++;
 
 		PriorityChanged?.Invoke(manager);
 	}

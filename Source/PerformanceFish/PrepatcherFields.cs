@@ -74,6 +74,10 @@ public static class PrepatcherFields
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public static extern ref StorageSettingsPatches.StorageSettingsCache Cache(this StorageSettings storageSettings);
 
+	[PrepatcherField]
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	public static extern ref int SpawnedMemberCount(this StorageGroup storageGroup);
+
 #if V1_4
 	[PrepatcherField]
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]

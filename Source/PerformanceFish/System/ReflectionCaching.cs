@@ -99,9 +99,9 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 		{
 			public override string Description { get; } = "Caches GetField lookups";
 
-			public override MethodBase TargetMethodInfo { get; }
-				= AccessTools.Method(typeof(RuntimeType), nameof(RuntimeType.GetField),
-					[typeof(string), typeof(BindingFlags)])!;
+			public override MethodBase? TargetMethodInfo { get; }
+				= AccessTools.DeclaredMethod(typeof(RuntimeType), nameof(RuntimeType.GetField),
+					[typeof(string), typeof(BindingFlags)]);
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static bool Prefix(Type __instance, string name, BindingFlags bindingAttr, out FieldInfo? __result,
@@ -145,8 +145,9 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 		{
 			public override string Description { get; } = "Caches GetFields lookups";
 
-			public override MethodBase TargetMethodInfo { get; }
-				= AccessTools.Method(typeof(RuntimeType), nameof(RuntimeType.GetFields), [typeof(BindingFlags)])!;
+			public override MethodBase? TargetMethodInfo { get; }
+				= AccessTools.DeclaredMethod(typeof(RuntimeType), nameof(RuntimeType.GetFields),
+					[typeof(BindingFlags)]);
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static bool Prefix(Type __instance, BindingFlags bindingAttr, out FieldInfo[]? __result,
@@ -186,9 +187,9 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 		{
 			public override string Description { get; } = "Caches GetMethod lookups";
 
-			public override Expression<Action> TargetMethod { get; }
-			// ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-				= static () => default(Type)!.GetMethod(null!, default(BindingFlags));
+			public override MethodBase? TargetMethodInfo { get; }
+				= AccessTools.DeclaredMethod(typeof(Type), nameof(Type.GetMethod),
+					[typeof(string), typeof(BindingFlags)]);
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static bool Prefix(Type __instance, string name, BindingFlags bindingAttr, out MethodInfo? __result,
@@ -223,9 +224,9 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 		{
 			public override string Description { get; } = "Caches GetMethod lookups";
 
-			public override Expression<Action> TargetMethod { get; }
-			// ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-				= static () => default(Type)!.GetMethod(null!, null!);
+			public override MethodBase? TargetMethodInfo { get; }
+				= AccessTools.DeclaredMethod(typeof(Type), nameof(Type.GetMethod),
+					[typeof(string), typeof(Type[])]);
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static bool Prefix(Type __instance, string name, Type[] types, out MethodInfo? __result,
@@ -257,8 +258,11 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 		{
 			public override string Description { get; } = "Caches GetMethod lookups";
 
-			public override Expression<Action> TargetMethod { get; }
-				= static () => default(Type)!.GetMethod(null!, default, null, null!, null);
+			public override MethodBase? TargetMethodInfo { get; }
+				= AccessTools.DeclaredMethod(typeof(Type), nameof(Type.GetMethod),
+				[
+					typeof(string), typeof(BindingFlags), typeof(Binder), typeof(Type[]), typeof(ParameterModifier[])
+				]);
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static bool Prefix(Type __instance, string name, BindingFlags bindingAttr, Binder? binder,
@@ -300,8 +304,9 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 		{
 			public override string Description { get; } = "Caches GetConstructor lookups";
 
-			public override Expression<Action> TargetMethod { get; }
-				= static () => default(Type)!.GetConstructor(default, null, null!, null);
+			public override MethodBase? TargetMethodInfo { get; }
+				= AccessTools.DeclaredMethod(typeof(Type), nameof(Type.GetConstructor),
+					[typeof(BindingFlags), typeof(Binder), typeof(Type[]), typeof(ParameterModifier[])]);
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static bool Prefix(Type __instance, BindingFlags bindingAttr, Binder? binder, Type[] types,
@@ -341,9 +346,9 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 		{
 			public override string Description { get; } = "Caches GetProperty lookups";
 
-			public override Expression<Action> TargetMethod { get; }
-			// ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-				= static () => default(Type)!.GetProperty(null!, default(BindingFlags));
+			public override MethodBase? TargetMethodInfo { get; }
+				= AccessTools.DeclaredMethod(typeof(Type), nameof(Type.GetProperty),
+					[typeof(string), typeof(BindingFlags)]);
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static bool Prefix(Type __instance, string name, BindingFlags bindingAttr,
@@ -384,7 +389,7 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 				// https://github.com/Unity-Technologies/mono/blob/unity-2019.4-mbe/mono/metadata/icall.c#L2737-L2754
 
 			public override MethodBase TargetMethodInfo { get; }
-				= AccessTools.PropertyGetter(typeof(RuntimeType), nameof(RuntimeType.FullName));
+				= AccessTools.DeclaredPropertyGetter(typeof(RuntimeType), nameof(RuntimeType.FullName));
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static bool Prefix(RuntimeType __instance, ref string? __result, out bool __state)
@@ -747,7 +752,7 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 			//}
 
 			public override MethodBase TargetMethodInfo { get; }
-				= AccessTools.Method(typeof(MonoField), nameof(MonoField.GetValue))!;
+				= AccessTools.DeclaredMethod(typeof(MonoField), nameof(MonoField.GetValue))!;
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static bool Prefix(FieldInfo __instance, object? obj, ref object? __result)
@@ -771,8 +776,9 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 			public override string Description { get; }
 				= "Optimizes the SetValue method by invoking it through specialized cached delegates";
 
-			public override Expression<Action> TargetMethod { get; }
-				= static () => default(FieldInfo)!.SetValue(null, null);
+			public override MethodBase? TargetMethodInfo { get; }
+				= AccessTools.DeclaredMethod(typeof(FieldInfo), nameof(FieldInfo.SetValue),
+					[typeof(object), typeof(object)]);
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static bool Prefix(FieldInfo __instance, object? obj, object? value)
@@ -924,8 +930,9 @@ public sealed class ReflectionCaching : ClassWithFishPatches
 				= "Optimizes the Invoke method by compiling specialized cached delegates. Disabled by default due to "
 				+ "issues with various mods, like RIMMSqol and Performance Optimizer";
 
-			public override Expression<Action> TargetMethod { get; }
-				= static () => default(MethodBase)!.Invoke(null, null);
+			public override MethodBase? TargetMethodInfo { get; }
+				= AccessTools.DeclaredMethod(typeof(MethodBase), nameof(MethodBase.Invoke),
+					[typeof(object), typeof(object[])]);
 
 			[MethodImpl(MethodImplOptions.AggressiveInlining)]
 			public static bool Prefix(MethodBase __instance, object? obj, object[]? parameters, ref object? __result)

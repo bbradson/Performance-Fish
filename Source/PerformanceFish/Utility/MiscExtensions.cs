@@ -32,8 +32,6 @@ public static class MiscExtensions
 	public static StorageSettings? TryGetGroupStoreSettings(this ISlotGroupParent slotGroupParent)
 		=> slotGroupParent.TryGetStorageGroup()?.GetStoreSettings();
 
-	public static StorageGroup? TryGetStorageGroup(this SlotGroup slotGroup) => slotGroup.parent.TryGetStorageGroup();
-
 	public static StorageGroup? TryGetStorageGroup(this ISlotGroupParent slotGroupParent)
 		=> slotGroupParent is IStorageGroupMember groupMember ? groupMember.Group : null;
 
@@ -81,6 +79,9 @@ public static class MiscExtensions
 		map.regionAndRoomUpdater.TryRebuildDirtyRegionsAndRooms();
 		return grid.regionGrid[c.CellToIndex(map)] is { valid: true } region ? region : null;
 	}
+
+	public static Vector2 GetRotatedDrawSize(this Thing thing)
+		=> !thing.Graphic.ShouldDrawRotated && thing.Rotation.IsHorizontal ? thing.DrawSize.Rotated() : thing.DrawSize;
 
 	public static bool ContainsThingStackableWith(this List<Thing> thingsOfSingleDef, Thing t)
 	{
