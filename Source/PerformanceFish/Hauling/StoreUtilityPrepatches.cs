@@ -291,6 +291,9 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 					if (storageGroup != null)
 					{
 						otherGroupMembers = storageGroup.SpawnedMemberCount() - 1;
+						if (otherGroupMembers < 0)
+							goto FixCache;
+						
 						Debug.VerifyStorageGroup(otherGroupMembers, listInPriorityOrder, i, storageGroup);
 						
 						groupsOfPriorityCount -= otherGroupMembers;
