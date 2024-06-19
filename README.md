@@ -12,5 +12,16 @@ Special patches exist to add new entries and features to Dub's Performance Analy
 Almost all mods, including Combat Extended, Multiplayer, Vanilla Expanded, RocketMan and Performance Optimizer, are compatible.  
   
 RimThreaded, RimWorld Rick, Oskar Obnoxious, No Laggy Beds and Better GC are currently marked as incompatible.  
-  
+
 Licensed under [MPL-2.0](https://tldrlegal.com/license/mozilla-public-license-2.0-(mpl-2))
+
+# Hot to build
+If you have an IDE that can open `.sln` directly and build, use that IDE.
+
+Or use [dotnet](https://learn.microsoft.com/en-us/dotnet/core/install/) command.
+```
+git clone https://github.com/bbradson/Performance-Fish.git
+git clone https://github.com/bbradson/Fishery.git
+cd Performance-Fish/Source/PerformanceFish
+dotnet build PerformanceFish.sln 
+```
