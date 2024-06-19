@@ -13,6 +13,8 @@ Almost all mods, including Combat Extended, Multiplayer, Vanilla Expanded, Rocke
   
 RimThreaded, RimWorld Rick, Oskar Obnoxious, No Laggy Beds and Better GC are currently marked as incompatible.  
 
+Licensed under [MPL-2.0](https://tldrlegal.com/license/mozilla-public-license-2.0-(mpl-2))
+
 # Hot to build
 If you have an IDE that can open `.sln` directly and build, use that IDE.
 
@@ -23,5 +25,3 @@ git clone https://github.com/bbradson/Fishery.git
 cd Performance-Fish/Source/PerformanceFish
 dotnet build PerformanceFish.sln 
 ```
-
-Licensed under [MPL-2.0](https://tldrlegal.com/license/mozilla-public-license-2.0-(mpl-2))
