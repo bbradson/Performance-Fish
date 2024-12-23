@@ -29,7 +29,7 @@
 	<ItemGroup>
 		<PackageReference Include="Zetrith.Prepatcher" Version="1.*" ExcludeAssets="runtime" />
 		<PackageReference Include="PolySharp" Version="1.*" />
-		<PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.*" ExcludeAssets="runtime" />
+		<PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.*" ExcludeAssets="runtime" />
 		<PackageReference Include="JetBrains.Annotations" Version="2023.*" Aliases="nuget" ExcludeAssets="runtime" />
 		<PackageReference Include="Krafs.Publicizer" Version="2.*" />
 		
