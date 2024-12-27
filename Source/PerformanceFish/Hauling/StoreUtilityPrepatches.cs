@@ -442,7 +442,8 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
     {
 
         public override string? Description { get; }
-            = "Removes haulables from ListerHaulables if the found best store cell turns out to be the current cell";
+            = "Removes haulables from ListerHaulables if the found best store cell turns out to be the current cell. "
+			+ "Need TryFindBestBetterStoreCellFor to work.";
 
         public override MethodBase TargetMethodBase { get; } = methodof(StoreUtility.TryFindBestBetterStorageFor);
 
@@ -473,7 +474,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
             {
                 if (haulDestination == null)
                 {
-                    if (foundCell != IntVec3.Invalid) // TryFindBestBetterStoreCellForPatch says it's already in best cell
+                    if (StoreCellForPatchActive && foundCell != IntVec3.Invalid) // TryFindBestBetterStoreCellForPatch says it's already in best cell
                     {
                         foundCell = IntVec3.Invalid;
                         TryRemoveFromListerHaulables(t, currentPriority);
@@ -500,7 +501,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 
         private static int _storeCellForPatchActive = int.MaxValue;
 
-        private static bool StoreCellForPatchActive
+        public static bool StoreCellForPatchActive
             => _storeCellForPatchActive != int.MaxValue
                 ? _storeCellForPatchActive.AsBool()
                 : UpdateStoreCellForPatchActive();
