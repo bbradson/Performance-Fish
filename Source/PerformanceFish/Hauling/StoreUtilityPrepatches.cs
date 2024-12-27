@@ -233,7 +233,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 	{
 		public override string? Description { get; }
 			= "Optimizes a loop in the method to treat storage groups as proper groups without duplicate checks and to "
-			+ "make use of cached storage priorities for fewer comparisons against those. Also removes haulables from "
+			+ "make use of cached storage priorities for fewer comparisons against those. Also flags haulables for removal from "
 			+ "ListerHaulables if the found best store cell turns out to be the current cell";
 
 		public override MethodBase TargetMethodBase { get; } = methodof(StoreUtility.TryFindBestBetterStoreCellFor);
@@ -260,6 +260,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			var foundPriority = currentPriority;
 			var closestDistSquared = (float)int.MaxValue;
 			var closestSlot = IntVec3.Invalid;
+			var alreadyBest = false;
 
 			var hadToFixCache = false;
 
@@ -276,7 +277,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 
 				if ((StoragePriority)priorityGroupIndex <= currentPriority) // current storage is highest valid priority
 				{
-					TryRemoveFromListerHaulables(t, currentPriority);
+					alreadyBest = true;
 					break;
 				}
 
@@ -329,7 +330,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		Result:
 			if (!closestSlot.IsValid)
 			{
-				foundCell = IntVec3.Invalid;
+				foundCell = alreadyBest ? IntVec3.Zero : IntVec3.Invalid;
 				return false;
 			}
 			
@@ -391,30 +392,6 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		public static int[] GetCachedGroupCountByPriority(HaulDestinationManager haulDestinationManager)
 			=> haulDestinationManager.Cache().GroupCountByPriority;
 
-		[MethodImpl(MethodImplOptions.NoInlining)]
-		public static void TryRemoveFromListerHaulables(Thing t, StoragePriority currentPriority)
-		{
-			if (ModCompatibility.ActiveMods.Multiplayer | !HaulablesTickPatchActive)
-				return;
-
-			if (t.IsInAnyStorage() /*t.IsInValidStorage()*/ && t.TryGetMapHeld() is { } map)
-				map.listerHaulables.Cache().ThingsQueuedToRemove.Add(t);
-
-			// remove for any storage instead of only valid storage to prevent further haul attempts until the next
-			// automatic ListerHaulablesTick cycle
-		}
-
-		private static int _haulablesTickPatchActive = int.MaxValue;
-
-		private static bool HaulablesTickPatchActive
-			=> _haulablesTickPatchActive != int.MaxValue
-				? _haulablesTickPatchActive.AsBool()
-				: UpdateHaulablesTickPatchActive();
-
-		[MethodImpl(MethodImplOptions.NoInlining)]
-		private static bool UpdateHaulablesTickPatchActive()
-			=> (_haulablesTickPatchActive = Get<Haulables.TickPatch>().IsActive.AsInt()).AsBool();
-
 		public static class Debug
 		{
 			[Conditional("STORAGE_GROUP_DEBUG")]
@@ -460,6 +437,89 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			public static bool LoggedOnce;
 		}
 	}
+
+    public sealed class TryFindBestBetterStorageForPatch : FishPrepatch
+    {
+
+        public override string? Description { get; }
+            = "Removes haulables from ListerHaulables if the found best store cell turns out to be the current cell";
+
+        public override MethodBase TargetMethodBase { get; } = methodof(StoreUtility.TryFindBestBetterStorageFor);
+
+        public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
+            => ilProcessor.ReplaceBodyWith(ReplacementBody);
+
+        public static bool ReplacementBody(Thing t, Pawn carrier, Map map,
+        StoragePriority currentPriority, Faction faction, out IntVec3 foundCell, out IHaulDestination haulDestination, bool needAccurateResult = true)
+        {
+            if (!StoreUtility.TryFindBestBetterNonSlotGroupStorageFor(t, carrier, map, currentPriority, faction, out haulDestination))
+            {
+                haulDestination = null!;
+            }
+
+            if (StoreUtility.TryFindBestBetterStoreCellFor(t, carrier, map, currentPriority, faction, out foundCell, needAccurateResult))
+            {
+                if (haulDestination != null && haulDestination.GetStoreSettings().Priority > foundCell.GetSlotGroup(map).Settings.Priority)
+                {
+                    foundCell = IntVec3.Invalid;
+                }
+                else
+                {
+                    haulDestination = foundCell.GetSlotGroup(map).parent;
+                }
+                return true;
+            }
+            else
+            {
+                if (haulDestination == null)
+                {
+                    if (foundCell != IntVec3.Invalid) // TryFindBestBetterStoreCellForPatch says it's already in best cell
+                    {
+                        foundCell = IntVec3.Invalid;
+                        TryRemoveFromListerHaulables(t, currentPriority);
+                    }
+                    return false;
+                }
+                foundCell = IntVec3.Invalid;
+                return true;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        public static void TryRemoveFromListerHaulables(Thing t, StoragePriority currentPriority)
+        {
+            if (ModCompatibility.ActiveMods.Multiplayer | !HaulablesTickPatchActive)
+                return;
+
+            if (t.IsInAnyStorage() /*t.IsInValidStorage()*/ && t.TryGetMapHeld() is { } map)
+                map.listerHaulables.Cache().ThingsQueuedToRemove.Add(t);
+
+            // remove for any storage instead of only valid storage to prevent further haul attempts until the next
+            // automatic ListerHaulablesTick cycle
+        }
+
+        private static int _storeCellForPatchActive = int.MaxValue;
+
+        private static bool StoreCellForPatchActive
+            => _storeCellForPatchActive != int.MaxValue
+                ? _storeCellForPatchActive.AsBool()
+                : UpdateStoreCellForPatchActive();
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static bool UpdateStoreCellForPatchActive()
+            => (_haulablesTickPatchActive = Get<TryFindBestBetterStoreCellForPatch>().IsActive.AsInt()).AsBool();
+
+        private static int _haulablesTickPatchActive = int.MaxValue;
+
+        private static bool HaulablesTickPatchActive
+            => _haulablesTickPatchActive != int.MaxValue
+                ? _haulablesTickPatchActive.AsBool()
+                : UpdateHaulablesTickPatchActive();
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static bool UpdateHaulablesTickPatchActive()
+            => (_haulablesTickPatchActive = Get<Haulables.TickPatch>().IsActive.AsInt()).AsBool();
+    }
 
 	public sealed class GetSlotGroupPatch : FishPrepatch
 	{
