@@ -31,12 +31,12 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		{
 			if (!IsStorageBlocker(thing.def))
 				return;
-			
+
 			var thingEvents = thing.Events();
 			thingEvents.RegisteredAtThingGrid += SetStorageBlocker;
 			thingEvents.DeregisteredAtThingGrid += TryUnsetStorageBlocker;
 		}
-		
+
 		public static bool IsStorageBlocker(ThingDef thingDef)
 			=> (thingDef.entityDefToBuild != null && thingDef.entityDefToBuild.passability != 0)
 				|| (thingDef.passability != 0
@@ -59,7 +59,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 
 			map.StorageBlockerGrid()[cell] = false;
 		}
-		
+
 		public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
 			=> ilProcessor.ReplaceBodyWith(ReplacementBody);
 
@@ -70,7 +70,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 
 			if (c.GetItemCount(map) < c.GetMaxItemsAllowedInCell(map))
 				return true;
-			
+
 			var thingsAtCell = map.thingGrid.ThingsListAt(c);
 			var thingCount = thingsAtCell.Count;
 			for (var i = 0; i < thingCount; i++)
@@ -105,13 +105,13 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 
 		public override MethodBase TargetMethodBase { get; }
 			= methodof(StoreUtility.TryFindBestBetterStoreCellForWorker);
-		
+
 		protected internal override void OnPatchingCompleted() => ThingEvents.Initialized += TryRegister;
 
 		public static void TryRegister(Thing thing)
 		{
 			var thingEvents = thing.Events();
-			
+
 			if (thing is ISlotGroupParent)
 				thingEvents.Spawned += StorageSettingsPatches.InitializeSlotGroupParent;
 
@@ -126,7 +126,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		{
 			if (cell.GetSlotGroupParent(map) is { } parent and Thing)
 				parent.GetThingStoreSettings()?.Cache().Notify_ReceivedThing(thing);
-			
+
 			map.StorageDistrictGrid()[cell]?.AddThing(thing);
 		}
 
@@ -134,7 +134,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		{
 			if (cell.GetSlotGroupParent(map) is { } parent and Thing)
 				parent.GetThingStoreSettings()?.Cache().Notify_LostThing(thing);
-			
+
 			map.StorageDistrictGrid()[cell]?.RemoveThing(thing);
 		}
 
@@ -152,32 +152,32 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		{
 			if (slotGroup == null || !slotGroup.Settings.AllowedToAccept(t) || !CapacityAllows(slotGroup, t))
 				return;
-			
+
 			var thingPosition = t.SpawnedOrAnyParentSpawned ? t.PositionHeld : carrier.PositionHeld;
 			var slotGroupCells = slotGroup.CellsList;
-			
+
 			var maxValidCellsToCheck
 				= !FishSettings.ImproveHaulingAccuracy && needAccurateResult
 					? Mathf.FloorToInt(slotGroupCells.Count * Rand.Range(0.005f, 0.018f))
 					: 0;
-		
+
 		StartOfDistrictLoop:
 			var districts = GetDistricts(slotGroup);
-			
+
 			for (var districtIndex = 0; districtIndex < districts.Length; districtIndex++)
 			{
 				var district = districts[districtIndex];
-		
+
 				if (!district.CapacityAllows(t))
 					continue;
-		
+
 				var districtCells = districts.Length > 1 ? district.Cells : slotGroupCells;
-				
+
 				for (var i = 0; i < districtCells.Count; i++)
 				{
 					var slotGroupCell = districtCells[i];
 					var cellDistance = (float)(thingPosition - slotGroupCell).LengthHorizontalSquared;
-		
+
 					if (cellDistance > closestDistSquared
 						|| !StoreUtility.IsGoodStoreCell(slotGroupCell, map, t, carrier, faction))
 					{
@@ -189,7 +189,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 						district.Parent.ResetAndRemakeDistricts(); // TODO: figure out why this happens
 						goto StartOfDistrictLoop;
 					}
-					
+
 					closestSlot = slotGroupCell;
 					closestDistSquared = cellDistance;
 					foundPriority = slotGroup.Settings.Priority;
@@ -211,7 +211,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 
 		public static bool CapacityAllows(ISlotGroup iSlotGroup, Thing t)
 			=> iSlotGroup is not SlotGroup slotGroup || CapacityAllows(slotGroup, t);
-		
+
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static bool CapacityAllows(SlotGroup slotGroup, Thing t)
 		{
@@ -221,7 +221,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 
 			ref var cache = ref storageSettings.Cache();
 			StorageSettingsPatches.Debug.VerifyItemCount((Thing)storageSettings.owner, ref cache);
-			
+
 			return cache.FreeSlots > 0 || AcceptsForStacking(ref cache, t);
 		}
 
@@ -233,7 +233,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 	{
 		public override string? Description { get; }
 			= "Optimizes a loop in the method to treat storage groups as proper groups without duplicate checks and to "
-			+ "make use of cached storage priorities for fewer comparisons against those. Also flags haulables for removal from "
+			+ "make use of cached storage priorities for fewer comparisons against those. Also removes haulables from "
 			+ "ListerHaulables if the found best store cell turns out to be the current cell";
 
 		public override MethodBase TargetMethodBase { get; } = methodof(StoreUtility.TryFindBestBetterStoreCellFor);
@@ -256,11 +256,10 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			if (!Debug.LoggedOnce && !(Current.Game?.tickManager?.Paused ?? true))
 				Debug.LogStuff(haulDestinationManager);
 #endif
-			
+
 			var foundPriority = currentPriority;
 			var closestDistSquared = (float)int.MaxValue;
 			var closestSlot = IntVec3.Invalid;
-			var alreadyBest = false;
 
 			var hadToFixCache = false;
 
@@ -271,13 +270,13 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 			for (var priorityGroupIndex = groupCountByPriority.Length; priorityGroupIndex-- > 0;)
 			{
 				var groupsOfPriorityCount = groupCountByPriority[priorityGroupIndex];
-				
+
 				if ((StoragePriority)priorityGroupIndex < foundPriority) // succeeded finding a higher priority storage
 					break;
 
 				if ((StoragePriority)priorityGroupIndex <= currentPriority) // current storage is highest valid priority
 				{
-					alreadyBest = true;
+					TryRemoveFromListerHaulables(t, currentPriority);
 					break;
 				}
 
@@ -285,7 +284,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 				{
 					if (i >= listInPriorityOrderCount)
 						goto FixCache;
-					
+
 					var slotGroup = listInPriorityOrder[i++];
 					int otherGroupMembers;
 					var storageGroup = slotGroup.StorageGroup;
@@ -294,11 +293,11 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 						otherGroupMembers = storageGroup.SpawnedMemberCount() - 1;
 						if (otherGroupMembers < 0)
 							goto FixCache;
-						
+
 						Debug.VerifyStorageGroup(otherGroupMembers, listInPriorityOrder, i, storageGroup);
-						
+
 						groupsOfPriorityCount -= otherGroupMembers;
-						
+
 						if (!storageGroup.Accepts(t))
 						{
 							i += otherGroupMembers;
@@ -317,10 +316,10 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 
 						if (otherGroupMembers <= 0)
 							break;
-						
+
 						if (i >= listInPriorityOrderCount)
 							goto FixCache;
-						
+
 						otherGroupMembers--;
 						slotGroup = listInPriorityOrder[i++];
 					}
@@ -330,13 +329,13 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		Result:
 			if (!closestSlot.IsValid)
 			{
-				foundCell = alreadyBest ? IntVec3.Zero : IntVec3.Invalid;
+				foundCell = IntVec3.Invalid;
 				return false;
 			}
-			
+
 			foundCell = closestSlot;
 			return true;
-			
+
 		FixCache:
 			if (!hadToFixCache)
 			{
@@ -356,11 +355,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		public static void LogErrorForFailedTryFindBestBetterStoreCellForAttempt(Thing t, Pawn carrier, Map? map,
 			StoragePriority currentPriority, Faction faction, IntVec3 closestSlot)
 			=> Log.Error($"Performance Fish's TryFindBestBetterStoreCellFor patch failed to compute accurate "
-				+ $"results after a recache attempt for thing '{t}', pawn '{carrier}', map '{
-					map}', currentPriority '{currentPriority}', faction '{
-						faction}'. The last found cell was '{
-							closestSlot}'. It is most likely incompatible with something in the mod list.\n{
-								Debug.GetStorageGroupInfo(map?.haulDestinationManager)}");
+				+ $"results after a recache attempt for thing '{t}', pawn '{carrier}', map '{map}', currentPriority '{currentPriority}', faction '{faction}'. The last found cell was '{closestSlot}'. It is most likely incompatible with something in the mod list.\n{Debug.GetStorageGroupInfo(map?.haulDestinationManager)}");
 
 		[MethodImpl(MethodImplOptions.NoInlining)]
 		public static void UpdateCache(HaulDestinationManager haulDestinationManager)
@@ -376,13 +371,13 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 					if (member.Group != group)
 						members.RemoveAt(j);
 				}
-				
+
 				if (members.Count == 0)
 					storageGroups.RemoveAt(i);
 			}
-			
+
 			haulDestinationManager.RecalculateStorageGroupMemberCount();
-			
+
 			haulDestinationManager.AllGroupsListInPriorityOrder.InsertionSort(HaulDestinationManager
 				.CompareSlotGroupPrioritiesDescending);
 			haulDestinationManager.Cache().OnPriorityChanged(haulDestinationManager);
@@ -391,6 +386,30 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static int[] GetCachedGroupCountByPriority(HaulDestinationManager haulDestinationManager)
 			=> haulDestinationManager.Cache().GroupCountByPriority;
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		public static void TryRemoveFromListerHaulables(Thing t, StoragePriority currentPriority)
+		{
+			if (ModCompatibility.ActiveMods.Multiplayer | !HaulablesTickPatchActive)
+				return;
+
+			if (t.IsInAnyStorage() /*t.IsInValidStorage()*/ && t.TryGetMapHeld() is { } map)
+				map.listerHaulables.Cache().ThingsQueuedToRemove.Add(t);
+
+			// remove for any storage instead of only valid storage to prevent further haul attempts until the next
+			// automatic ListerHaulablesTick cycle
+		}
+
+		private static int _haulablesTickPatchActive = int.MaxValue;
+
+		private static bool HaulablesTickPatchActive
+			=> _haulablesTickPatchActive != int.MaxValue
+				? _haulablesTickPatchActive.AsBool()
+				: UpdateHaulablesTickPatchActive();
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static bool UpdateHaulablesTickPatchActive()
+			=> (_haulablesTickPatchActive = Get<Haulables.TickPatch>().IsActive.AsInt()).AsBool();
 
 		public static class Debug
 		{
@@ -404,9 +423,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 					if (otherSlotGroup.StorageGroup == storageGroup)
 						continue;
 
-					Log.Error($"Incorrect haul destination order! Storage '{
-						otherSlotGroup.parent}' was expected to have Storage group '{storageGroup}', but had '{
-							otherSlotGroup.StorageGroup.ToStringSafe()}' instead");
+					Log.Error($"Incorrect haul destination order! Storage '{otherSlotGroup.parent}' was expected to have Storage group '{storageGroup}', but had '{otherSlotGroup.StorageGroup.ToStringSafe()}' instead");
 				}
 			}
 
@@ -422,12 +439,10 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 				var slotGroupsInPriorityOrder = haulDestinationManager?.AllGroupsListInPriorityOrder;
 				if (slotGroupsInPriorityOrder is null)
 					return string.Empty;
-				
+
 				var storageGroups = haulDestinationManager!.map.storageGroups.groups;
 
-				return StringHelper.Resolve($"SlotGroup count: {
-					slotGroupsInPriorityOrder.Count}, StorageGroup count: {
-						storageGroups.Count}, slotGroups in storage groups: {storageGroups
+				return StringHelper.Resolve($"SlotGroup count: {slotGroupsInPriorityOrder.Count}, StorageGroup count: {storageGroups.Count}, slotGroups in storage groups: {storageGroups
 							.Select(static group => group!.SpawnedMemberCount())
 							.Sum()}, outside of storage groups: {slotGroupsInPriorityOrder
 							.Select(static slotGroup => slotGroup.StorageGroup)
@@ -438,95 +453,41 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		}
 	}
 
-    public sealed class TryFindBestBetterStorageForPatch : FishPrepatch
-    {
+	public sealed class TryFindBestBetterStorageForPatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Cancel the removal of haulables if there is a better non-cell storage. "
+			+ "Only needed when TryFindBestBetterStoreCellFor is enabled.";
 
-        public override string? Description { get; }
-            = "Removes haulables from ListerHaulables if the found best store cell turns out to be the current cell. "
-			+ "Need TryFindBestBetterStoreCellFor to work.";
+		public override MethodBase TargetMethodBase { get; } = methodof(StoreUtility.TryFindBestBetterStorageFor);
 
-        public override MethodBase TargetMethodBase { get; } = methodof(StoreUtility.TryFindBestBetterStorageFor);
+		public static void Postfix(Thing t, Pawn carrier, Map map, StoragePriority currentPriority, Faction faction, ref IntVec3 foundCell, ref IHaulDestination haulDestination, bool needAccurateResult, ref bool __result)
+		{
+			if (StoreCellForPatchActive && __result && foundCell == IntVec3.Invalid && t.TryGetMapHeld() is { } m)
+			{
+				var cache = m.listerHaulables.Cache();
+				cache.ThingsQueuedToRemove.Remove(t);
+			}
+		}
 
-        public override void Transpiler(ILProcessor ilProcessor, ModuleDefinition module)
-            => ilProcessor.ReplaceBodyWith(ReplacementBody);
+		private static int _storeCellForPatchActive = int.MaxValue;
 
-        public static bool ReplacementBody(Thing t, Pawn carrier, Map map,
-        StoragePriority currentPriority, Faction faction, out IntVec3 foundCell, out IHaulDestination haulDestination, bool needAccurateResult = true)
-        {
-            if (!StoreUtility.TryFindBestBetterNonSlotGroupStorageFor(t, carrier, map, currentPriority, faction, out haulDestination))
-            {
-                haulDestination = null!;
-            }
+		private static bool StoreCellForPatchActive
+			=> _storeCellForPatchActive != int.MaxValue
+				? _storeCellForPatchActive.AsBool()
+				: UpdateStoreCellForPatchActive();
 
-            if (StoreUtility.TryFindBestBetterStoreCellFor(t, carrier, map, currentPriority, faction, out foundCell, needAccurateResult))
-            {
-                if (haulDestination != null && haulDestination.GetStoreSettings().Priority > foundCell.GetSlotGroup(map).Settings.Priority)
-                {
-                    foundCell = IntVec3.Invalid;
-                }
-                else
-                {
-                    haulDestination = foundCell.GetSlotGroup(map).parent;
-                }
-                return true;
-            }
-            else
-            {
-                if (haulDestination == null)
-                {
-                    if (StoreCellForPatchActive && foundCell != IntVec3.Invalid) // TryFindBestBetterStoreCellForPatch says it's already in best cell
-                    {
-                        foundCell = IntVec3.Invalid;
-                        TryRemoveFromListerHaulables(t, currentPriority);
-                    }
-                    return false;
-                }
-                foundCell = IntVec3.Invalid;
-                return true;
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        public static void TryRemoveFromListerHaulables(Thing t, StoragePriority currentPriority)
-        {
-            if (ModCompatibility.ActiveMods.Multiplayer | !HaulablesTickPatchActive)
-                return;
-
-            if (t.IsInAnyStorage() /*t.IsInValidStorage()*/ && t.TryGetMapHeld() is { } map)
-                map.listerHaulables.Cache().ThingsQueuedToRemove.Add(t);
-
-            // remove for any storage instead of only valid storage to prevent further haul attempts until the next
-            // automatic ListerHaulablesTick cycle
-        }
-
-        private static int _storeCellForPatchActive = int.MaxValue;
-
-        public static bool StoreCellForPatchActive
-            => _storeCellForPatchActive != int.MaxValue
-                ? _storeCellForPatchActive.AsBool()
-                : UpdateStoreCellForPatchActive();
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        private static bool UpdateStoreCellForPatchActive()
-            => (_haulablesTickPatchActive = Get<TryFindBestBetterStoreCellForPatch>().IsActive.AsInt()).AsBool();
-
-        private static int _haulablesTickPatchActive = int.MaxValue;
-
-        private static bool HaulablesTickPatchActive
-            => _haulablesTickPatchActive != int.MaxValue
-                ? _haulablesTickPatchActive.AsBool()
-                : UpdateHaulablesTickPatchActive();
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        private static bool UpdateHaulablesTickPatchActive()
-            => (_haulablesTickPatchActive = Get<Haulables.TickPatch>().IsActive.AsInt()).AsBool();
-    }
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static bool UpdateStoreCellForPatchActive()
+			=> (_storeCellForPatchActive = (Get<TryFindBestBetterStoreCellForPatch>().IsActive
+			&& Get<Haulables.TickPatch>().IsActive).AsInt()).AsBool();
+	}
 
 	public sealed class GetSlotGroupPatch : FishPrepatch
 	{
 		public override string? Description { get; }
 			= "Optimization for this method by reducing its amount of instructions without changing results";
-		
+
 		public override MethodBase TargetMethodBase { get; }
 			= methodof((Func<Thing, SlotGroup>)StoreUtility.GetSlotGroup);
 
@@ -541,7 +502,7 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 	{
 		public override string? Description { get; }
 			= "Optimization for this method by reducing its amount of instructions without changing results";
-		
+
 		public override MethodBase TargetMethodBase { get; }
 			= methodof(StoreUtility.CurrentHaulDestinationOf);
 
