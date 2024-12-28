@@ -461,6 +461,36 @@ public sealed class StoreUtilityPrepatches : ClassWithFishPrepatches
 		}
 	}
 
+	public sealed class TryFindBestBetterStorageForPatch : FishPrepatch
+	{
+		public override string? Description { get; }
+			= "Cancel the removal of haulables if there is a better non-cell storage. "
+			+ "Only needed when TryFindBestBetterStoreCellFor is enabled.";
+
+		public override MethodBase TargetMethodBase { get; } = methodof(StoreUtility.TryFindBestBetterStorageFor);
+
+		public static void Postfix(Thing t, Pawn carrier, Map map, StoragePriority currentPriority, Faction faction, ref IntVec3 foundCell, ref IHaulDestination haulDestination, bool needAccurateResult, ref bool __result)
+		{
+			if (StoreCellForPatchActive && __result && foundCell == IntVec3.Invalid && t.TryGetMapHeld() is { } m)
+			{
+				var cache = m.listerHaulables.Cache();
+				cache.ThingsQueuedToRemove.Remove(t);
+			}
+		}
+
+		private static int _storeCellForPatchActive = int.MaxValue;
+
+		private static bool StoreCellForPatchActive
+			=> _storeCellForPatchActive != int.MaxValue
+				? _storeCellForPatchActive.AsBool()
+				: UpdateStoreCellForPatchActive();
+
+		[MethodImpl(MethodImplOptions.NoInlining)]
+		private static bool UpdateStoreCellForPatchActive()
+			=> (_storeCellForPatchActive = (Get<TryFindBestBetterStoreCellForPatch>().IsActive
+			&& Get<Haulables.TickPatch>().IsActive).AsInt()).AsBool();
+	}
+
 	public sealed class GetSlotGroupPatch : FishPrepatch
 	{
 		public override string? Description { get; }
