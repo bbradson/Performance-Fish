@@ -550,7 +550,7 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			var gasGrids = map.gasGrid.ParallelGasGrids();
 			var cellIndex = new CellIndex(cell, map);
 
-			for (var i = 3; i < gasGrids.Length; i++)
+			for (var i = 4; i < gasGrids.Length; i++)
 			{
 				var gasGrid = gasGrids[i];
 				if (!gasGrid.AnyGasAt(cellIndex))
