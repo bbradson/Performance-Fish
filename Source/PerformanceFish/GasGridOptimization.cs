@@ -28,9 +28,9 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 {
 	private const int START_INDEX
 #if V1_4
-			= 3;
+		= 3;
 #else
-	= 4;
+		= 4;
 #endif
 
 	public sealed class SetDirectPatch : FishPrepatch
