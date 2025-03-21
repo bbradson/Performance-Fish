@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2023 bradson
+// Copyright (c) 2023 bradson
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
@@ -26,6 +26,13 @@ namespace PerformanceFish;
 
 public sealed class GasGridOptimization : ClassWithFishPrepatches
 {
+	private const int START_INDEX
+#if V1_4
+			= 3;
+#else
+	= 4;
+#endif
+
 	public sealed class SetDirectPatch : FishPrepatch
 	{
 		public override bool ShowSettings => false;
@@ -550,7 +557,7 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			var gasGrids = map.gasGrid.ParallelGasGrids();
 			var cellIndex = new CellIndex(cell, map);
 
-			for (var i = 4; i < gasGrids.Length; i++)
+			for (var i = START_INDEX; i < gasGrids.Length; i++)
 			{
 				var gasGrid = gasGrids[i];
 				if (!gasGrid.AnyGasAt(cellIndex))
