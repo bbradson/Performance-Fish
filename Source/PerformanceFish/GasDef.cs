@@ -20,6 +20,9 @@ public class GasDef : Def
 			GasType.BlindSmoke => GasDefOf.BlindSmoke,
 			GasType.RotStink => GasDefOf.RotStink,
 			GasType.ToxGas => GasDefOf.ToxGas,
+#if !V1_4
+			GasType.DeadlifeDust => GasDefOf.DeadLifeDust,
+#endif
 			_ => null
 		};
 }
