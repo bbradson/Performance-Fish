@@ -26,6 +26,13 @@ namespace PerformanceFish;
 
 public sealed class GasGridOptimization : ClassWithFishPrepatches
 {
+	private const int START_INDEX
+#if V1_4
+		= 3;
+#else
+		= 4;
+#endif
+
 	public sealed class SetDirectPatch : FishPrepatch
 	{
 		public override bool ShowSettings => false;
@@ -493,7 +500,7 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 		{
 			var gasDefs = DefDatabase<GasDef>.AllDefsListForReading;
 
-			for (var i = 3; i < gasDefs.Count; i++)
+			for (var i = START_INDEX; i < gasDefs.Count; i++)
 			{
 				var gasDef = gasDefs[i];
 				
@@ -550,7 +557,7 @@ public sealed class GasGridOptimization : ClassWithFishPrepatches
 			var gasGrids = map.gasGrid.ParallelGasGrids();
 			var cellIndex = new CellIndex(cell, map);
 
-			for (var i = 3; i < gasGrids.Length; i++)
+			for (var i = START_INDEX; i < gasGrids.Length; i++)
 			{
 				var gasGrid = gasGrids[i];
 				if (!gasGrid.AnyGasAt(cellIndex))

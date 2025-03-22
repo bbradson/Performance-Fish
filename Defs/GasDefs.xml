@@ -26,7 +26,7 @@
 
 	<PerformanceFish.GasDef>
 		<defName>DeadLifeDust</defName>
-		<label>dead life dust</label>
+		<label>deadlife dust</label>
 		<dissipationRate>3</dissipationRate>
 		<diffuses>true</diffuses>
 		<color>(3,13,51)</color>
