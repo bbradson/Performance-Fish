@@ -12,7 +12,7 @@
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="Krafs.Rimworld.Ref" Version="1.5.*" />
-		<PackageReference Include="Lib.Harmony" Version="2.3.*" ExcludeAssets="runtime" />
+		<PackageReference Include="Lib.Harmony" Version="2.3.3" ExcludeAssets="runtime" />
 		<Reference Include="1Fishery">
 			<HintPath>..\..\..\Fishery\1.5\Assemblies\1Fishery.dll</HintPath>
 			<Private>False</Private>

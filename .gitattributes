@@ -1,2 +1,24 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+*.jpg binary
+*.png binary
+*.gif binary
+*.dds binary
+*.psd binary
+
+*.in text eol=lf
+*.sh text eol=lf
+
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.cs text eol=lf diff=csharp
+*.sln text eol=lf
+*.xml text eol=lf
+*.txt text eol=lf
+*.md text eol=lf diff=markdown
+*.csproj text eol=lf
+.editorconfig text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
